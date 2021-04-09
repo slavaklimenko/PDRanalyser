@@ -806,7 +806,7 @@ class model():
             self.set_mask(logN=logN, sides=sides)
 
             for p in pars:
-                if p in ['av']:
+                if p in ['T01']:
                     mpars[p] = 0
                 else:
                     mpars[p] = np.trapz(getattr(self, p)[self.mask], x=self.x[self.mask])/self.x[self.mask][-1]
@@ -1224,9 +1224,9 @@ class H2_exc():
 
 
         for model in self.listofmodels(models):
-            model.calc_cols(spec.keys(), logN={'H2': q.e['H2'].col.val})
+            logN = {'CO': q.e['CO'].col.val} #if species == 'CO' else logN = {'H2': q.e['H2'].col.val}
+            model.calc_cols(spec.keys(), logN=logN)
             relative = 'CIj0' if species == 'CI' else None
-            relative = 'COj0' if species == 'CO' else None
             #relative = None
             #model.lnLike(OrderedDict([(s, q.e[s].col * a(0.0, syst, syst)) for s in keys]), relative=relative)
             model.lnLike(spec, relative=relative)
@@ -1505,7 +1505,7 @@ class H2_exc():
     def calc_pars_grid(self,pars = [], models='current'):
         self.setgrid(pars=pars, show=False)
         for m in self.mask:
-            self.models[m].calc_mean_pars(pars=['tgas','pgas'], logN={'H2': 20})
+            self.models[m].calc_mean_pars(pars=['tgas','pgas','T01'], logN={'H2': 20})
         self.grid['mpars'] = np.asarray([self.models[m].mpars for m in self.mask])
 
 if __name__ == '__main__':
@@ -1533,8 +1533,8 @@ if __name__ == '__main__':
         for s in ['z0_1']:
             if 1:
                 #H2 = H2_exc(folder='data/sample/1_5_4/av0_5_cmb2_5_{:s}_n_uv'.format(s))
-                H2 = H2_exc(folder='data/sample/1_5_4/av2_0_cmb0_0_z1_0_n_uv')
-                #H2 = H2_exc(folder='data/sample/1_5_4/test')
+                #H2 = H2_exc(folder='data/sample/1_5_4/av2_0_cmb0_0_z1_0_n_uv')
+                H2 = H2_exc(folder='data/sample/1_5_4/test')
                 H2.readfolder()
                 pars = {'n0': 'x', 'uv': 'y'}
                 H2.calc_pars_grid(pars=list(pars.keys()))

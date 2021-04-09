@@ -114,8 +114,8 @@ class plotExc(pg.PlotWidget):
             typ = [q.e[species+'j' + str(i)].col.type for i in j]
             if species == 'CI':
                 y = [(q.e[species + 'j' + str(i)].col/q.e['CIj0'].col)/ stat[i] for i in j]
-            if species == 'CO':
-                y = [(q.e[species + 'j' + str(i)].col / q.e['COj0'].col) / stat[i] for i in j]
+            #if species == 'CO':
+            #    y = [(q.e[species + 'j' + str(i)].col) / stat[i] for i in j]
             self.view[name] = [pg.ErrorBarItem(x=np.asarray(x), y=column(y, 'v'), top=column(y, 'p'), bottom=column(y, 'm'), beam=2),
                                pg.ScatterPlotItem(x, column(y, 'v'), symbol='o', size=15)]
             self.vb.addItem(self.view[name][0])
@@ -141,8 +141,8 @@ class plotExc(pg.PlotWidget):
                 mod = [m.cols[species+'j'+str(i)] - np.log10(stat[i]) for i in j]
                 if species == 'CI':
                     mod -=mod[0]
-                if species == 'CO':
-                    mod -= mod[0]
+                #if species == 'CO':
+                #    mod -= mod[0]
             self.models[name] = pg.PlotCurveItem(x, mod)
             self.vb.addItem(self.models[name])
             self.legend_model.addItem(self.models[name], name)
@@ -195,7 +195,7 @@ class plotExc(pg.PlotWidget):
                 if species =='CI':
                     mod = [cols[species + 'j' + str(i)] - cols['CIj0'] - np.log10(stat[i]) for i in j]
                 if species =='CO':
-                    mod = [cols[species + 'j' + str(i)] - cols['COj0'] - np.log10(stat[i]) for i in j]
+                    mod = [cols[species + 'j' + str(i)] - np.log10(stat[i]) for i in j]
             # save local fit to species excitation
             if 0:
                 with open('temp/local_fit.pkl', 'wb') as f:
@@ -716,7 +716,7 @@ class gridParsWidget(QWidget):
             elif str(self.species.currentText()) == 'CI':
                 species[s] = v1 / self.parent.H2.comp(grid['name']).e['CIj0'].col.log()
             elif str(self.species.currentText()) == 'CO':
-                species[s] = v1 / self.parent.H2.comp(grid['name']).e['COj0'].col.log()
+                species[s] = v1
 
 
         if 1:
@@ -762,7 +762,7 @@ class gridParsWidget(QWidget):
                             lnL += v.lnL(cols[s][k, i])
 
                         elif str(self.species.currentText()) == 'CO':
-                            cols[s][k, i] = self.cols[s](xi, yi) - self.cols['COj0'](xi, yi)
+                            cols[s][k, i] = self.cols[s](xi, yi)
                             lnL += v.lnL(cols[s][k, i])
 
                 z[k, i] = lnL
@@ -990,6 +990,7 @@ class gridParsWidget(QWidget):
                         z_prior = z_uni
 
                     # create a join likelihood (H2 + prior)
+                    print('Join likelihood for H2 + CO levels')
                     d = distr2d(x=self.x_, y=self.y_, z=np.exp(self.z_ + z_prior))
                     d.dopoint()
                     print('min chi2 coords:', d.point[0], d.point[1])
@@ -1040,7 +1041,6 @@ class gridParsWidget(QWidget):
                         x, stat = getatomic(species, levels=j)
                         y = [q.e[species + 'j' + str(i)].col / stat[i] for i in j]
                         ax_export[1].plot(x, [y[i].val for i in j], 'o')
-                        # j = [0,1,2,3,4,5,6]
                         x, stat = getatomic(species, levels=j)
                         mod = [self.cols['H2j' + str(i)](d.point[0], d.point[1]) - np.log10(stat[i]) for i in j]
                         ax_export[1].plot(x, mod)
@@ -1052,11 +1052,10 @@ class gridParsWidget(QWidget):
                             j = np.sort([int(s[3:]) for s in sp if 'v' not in s])
                             x, stat = getatomic(species, levels=j)
                             y = [q.e[species + 'j' + str(i)].col / stat[i] for i in j]
-                            ax_export[2].plot(x, [y[i].val - y[0].val for i in j], 'o')
-                            # j = [0, 1, 2,3,4,5,6]
+                            ax_export[2].plot(x, [y[i].val for i in j], 'o')
                             x, stat = getatomic(species, levels=j)
-                            mod = [cols_co['COj' + str(i)](dco.point[0], dco.point[1]) - np.log10(stat[i]) for i in j]
-                            ax_export[2].plot(x, mod - mod[0])
+                            mod = [cols_co['COj' + str(i)](d.point[0], d.point[1]) - np.log10(stat[i]) for i in j]
+                            ax_export[2].plot(x, mod)
 
                 plt.show()
 
