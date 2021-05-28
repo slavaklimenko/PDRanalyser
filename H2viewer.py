@@ -14,7 +14,7 @@ from scipy.interpolate import interp2d, RectBivariateSpline, Rbf
 import sys
 sys.path.append('C:/science/python')
 from H2_exc import *
-from spectro.stats import distr2d
+from spectro.stats import distr2d,distr1d
 from spectro.a_unc import a
 from spectro.pyratio import pyratio
 import copy
@@ -106,14 +106,19 @@ class plotExc(pg.PlotWidget):
     def add(self, name, add):
         if add:
             species = str(self.parent.grid_pars.species.currentText())
+            spmode = str(self.parent.grid_pars.spmode.currentText())
             q = self.parent.H2.comp(name)
             sp = [s for s in q.e.keys() if species+'j' in s]
             j = np.sort([int(s[3:]) for s in sp if 'v' not in s])
             x, stat = self.getatomic(species, levels=j)
             y = [q.e[species+'j' + str(i)].col / stat[i] for i in j]
             typ = [q.e[species+'j' + str(i)].col.type for i in j]
-            if species == 'CI':
-                y = [(q.e[species + 'j' + str(i)].col/q.e['CIj0'].col)/ stat[i] for i in j]
+            if spmode == 'rel':
+                print('def add: rel:',y)
+                y = [y[i]/q.e[species + 'j0'].col for i in j]
+                print(y)
+            #if species == 'CI':
+            #    y = [(q.e[species + 'j' + str(i)].col/q.e['CIj0'].col)/ stat[i] for i in j]
             #if species == 'CO':
             #    y = [(q.e[species + 'j' + str(i)].col) / stat[i] for i in j]
             self.view[name] = [pg.ErrorBarItem(x=np.asarray(x), y=column(y, 'v'), top=column(y, 'p'), bottom=column(y, 'm'), beam=2),
@@ -135,14 +140,13 @@ class plotExc(pg.PlotWidget):
     def add_model(self, name, add=True):
         if add:
             species = str(self.parent.grid_pars.species.currentText())
+            spmode = str(self.parent.grid_pars.spmode.currentText())
             for ind, m in enumerate(self.parent.H2.listofmodels(name)):
                 j = np.sort([int(s[3:]) for s in m.cols.keys()])
                 x, stat = self.getatomic(species, levels=j)
                 mod = [m.cols[species+'j'+str(i)] - np.log10(stat[i]) for i in j]
-                if species == 'CI':
+                if spmode == 'rel':
                     mod -=mod[0]
-                #if species == 'CO':
-                #    mod -= mod[0]
             self.models[name] = pg.PlotCurveItem(x, mod)
             self.vb.addItem(self.models[name])
             self.legend_model.addItem(self.models[name], name)
@@ -159,43 +163,14 @@ class plotExc(pg.PlotWidget):
     def add_temp(self, cols=None, pars=None, add=True):
         if add:
             species = str(self.parent.grid_pars.species.currentText())
+            spmode =  str(self.parent.grid_pars.spmode.currentText())
             j = np.sort([int(s[3:]) for s in cols.keys()])
             x, stat = self.getatomic(species, levels=j)
             mod = [cols[species+'j'+str(i)] - np.log10(stat[i]) for i in j]
-            if 1:
-                if species == 'H2':
-                    grid = self.parent.H2.grid
-                    others = self.parent.grid_pars.othermode.currentText()
-                    levels = self.parent.grid_pars.H2levels
-                    if len(levels) > 0:
-                            full_keys = grid['cols'][0].keys()
-                            keys = ['H2j{:}'.format(i) for i in levels if 'H2j{:}'.format(i) in full_keys]
-                            spec = {}
-                            for s in keys:
-                                v1 = self.parent.H2.comp(grid['name']).e[s].col.log().copy()
-                                v1 *= a(0, 0.2, 0.2, 'l')
-                                spec[s] = v1
-                            #spec = OrderedDict([(s, q.e[s].col * a(0.0, syst, syst)) for s in keys])
-                            if others in ['lower', 'upper']:
-                                for k in full_keys:
-                                    if k not in keys:
-                                        v = self.parent.H2.comp(grid['name']).e[k].col.log().copy() * a(0.0, 0.2, 0.2)
-                                        if others == 'lower':
-                                            spec[k] = a(v.val - v.minus, t=others[0])
-                                        else:
-                                            spec[k] = a(v.val + v.plus, t=others[0])
+            if spmode == 'rel':
+                mod -=mod[0]
 
-                    lnL = 0
-                    for s, v in spec.items():
-                        if v.type in ['m', 'u', 'l']:
-                            lnL += v.lnL(cols[s])
-                    print(spec)
-                    print(cols[species+'j'+str(i)] for i in j)
-                    print(lnL)
-                if species =='CI':
-                    mod = [cols[species + 'j' + str(i)] - cols['CIj0'] - np.log10(stat[i]) for i in j]
-                if species =='CO':
-                    mod = [cols[species + 'j' + str(i)] - np.log10(stat[i]) for i in j]
+
             # save local fit to species excitation
             if 0:
                 with open('temp/local_fit.pkl', 'wb') as f:
@@ -211,6 +186,38 @@ class plotExc(pg.PlotWidget):
             if pars is not None:
                 text += ' {0:.2f} {1:.2f}'.format(pars[0], pars[1])
             self.legend_model.addItem(self.temp_model, text)
+
+            if 0:
+
+                # calc and print lnL
+                others = self.parent.grid_pars.othermode.currentText()
+                levels = self.parent.grid_pars.H2levels
+                syst = float(self.parent.grid_pars.addSyst.text())
+                grid = self.parent.H2.grid
+                full_keys = grid['cols'][0].keys()
+                label = species + 'j{:}'
+                keys = [label.format(i) for i in levels if label.format(i) in full_keys]
+                spec = {}
+                for s in keys:
+                    v1 = self.parent.H2.comp(grid['name']).e[s].col.log().copy()
+                    v1 *= a(0, syst, syst, 'l')
+                    spec[s] = v1
+                    if spmode == 'rel':
+                        spec[s] -= spec[species + 'j0']
+                if others in ['lower', 'upper']:
+                    for k in full_keys:
+                        if k not in keys:
+                            v = self.parent.H2.comp(grid['name']).e[k].col.log().copy()
+                            if others == 'lower':
+                                spec[k] = a(v.val - v.minus, t=others[0])
+                            else:
+                                spec[k] = a(v.val + v.plus, t=others[0])
+
+                lnL = 0
+                for s, v in spec.items():
+                    if v.type in ['m', 'u', 'l']:
+                        lnL += v.lnL(mod[int(s[-1])])
+                print(lnL)
         else:
             try:
                 self.vb.removeItem(self.temp_model)
@@ -250,11 +257,12 @@ class textLabel(pg.TextItem):
         #m.plot_model(parx='h2', pars=[['tgas','n','pgas'],['heat_phel','heat_h2','heat_tot'],['cool_h2','cool_o','cool_elrec','cool_tot','cool_cp']],
         #             species=[['H2j0/H2', 'H2j1/H2', 'H2j2/H2','H2j3/H2', 'H2j4/H2'],['H','H2','H+','el','C']],
         #             logx=True, logy=True, limit={'H2': self.parent.parent.H2.grid['NH2tot'] -0.3 }) #, limit={'H2':21} #['OPR','OPR_logNJ1/J02','OPR_logNJ1/J0'],['uv_dens'],['H2_dest_rate'],
-        m.plot_model(parx='h2', pars=[['tgas','Nh2t02','Nh2t01'],['h2fr']],
-                     species=[['H2j0/H2', 'H2j1/H2', 'H2j2/H2','H2j3/H2', 'H2j4/H2'],['NH', 'NH2','NCI','NCO'],['H', 'H2','C','CO']],
-                     #excs=[16,17,18,19.5,21], #['NH','NH2','NCI','NCO'],['CIj1/CIj0','CIj2/CIj0'],
-                             # ['COj1/COj0','COj2/COj0']],
-                     logx=True, logy=True) #, limit={'H2':24})
+        m.plot_model(parx='h2', pars=[['tgas','Nh2t01','Nh2t02','tgas_m']],
+                     species=[['H2j0/H2', 'H2j1/H2', 'H2j2/H2','H2j3/H2', 'H2j4/H2'],['NH', 'NH2','NCI','NCO'],
+                     #excs=[16,17,18,19.5,21], #['NH','NH2','NCI','NCO'],
+                              ['CIj0/CI','CIj1/CI','CIj2/CI']],
+                              #['COj1/COj0','COj2/COj0','COj3/COj0']],
+                     logx=True, logy=True, borders={'H2': self.parent.parent.H2.grid['NH2tot']-0.3, 'CI': self.parent.parent.H2.grid['NCItot']-0.3,}) #, 'CI': self.parent.parent.H2.grid['NCOtot']-0.3}) #, limit={'H2':24})
                      #limit={'H2': self.parent.parent.H2.grid['NH2tot'] -0.3}) #, limit={'H2':21} #['OPR','OPR_logNJ1/J02','OPR_logNJ1/J0'],['uv_dens'],['H2_dest_rate'],
 
         # ['cool_cp','cool_o','cool_elrec','cool_tot','heat_phel','heat_phot','heat_tot']],
@@ -321,18 +329,24 @@ class plotGrid(pg.PlotWidget):
             if self.s_status:
                 name = self.parent.H2.grid['name']
                 self.mousePoint = self.vb.mapSceneToView(event.pos())
+                spmode = str(self.parent.grid_pars.spmode.currentText())
+                spname = str(self.parent.grid_pars.species.currentText())
                 print(self.mousePoint.x(), self.mousePoint.y())
                 if self.parent.grid_pars.cols is not None:
                     cols = {}
                     sp = self.parent.H2.grid['cols'][0].keys()
                     lnL = 0
+                    cols0 = self.parent.grid_pars.cols[spname + 'j0'](self.mousePoint.x(), self.mousePoint.y())
                     for s in sp:
                         v = self.parent.H2.comp(name).e[s].col
                         cols[s] = self.parent.grid_pars.cols[s](self.mousePoint.x(), self.mousePoint.y())
-                        print(self.mousePoint.x(), self.mousePoint.y(),s, cols[s])
+                        if spmode == 'rel':
+                            v = v/ self.parent.H2.comp(name).e[spname + 'j0'].col.log() #a(cols0,0,0,'l')
+                            cols[s] -=cols0
                         v1 = v * a(0, 0.2, 0.2, 'l')
                         if v.type == 'm':
                             lnL += v1.lnL(cols[s])
+                        print(s, cols[s], v1.val, lnL)
                     self.parent.plot_exc.add_temp(cols, add=False)
                     self.parent.plot_exc.add_temp(cols, pars=[self.mousePoint.x(), self.mousePoint.y()])
 
@@ -382,7 +396,7 @@ class QSOlistTable(pg.TableWidget):
         self.resize(w, self.size().height())
         self.setSortingEnabled(False)
 
-    def compare(self, species='H2'):
+    def compare(self, species='H2', spmode ='abs'):
         grid = self.parent.parent.grid_pars.pars
         syst = float(self.parent.parent.grid_pars.addSyst.text()) if self.parent.parent.grid_pars.addSyst.text().strip() != '' else 0
         pars = [list(grid.keys())[list(grid.values()).index('x')],
@@ -397,7 +411,7 @@ class QSOlistTable(pg.TableWidget):
                 name = self.cell_value('name')
                 self.parent.parent.H2.comparegrid(name, species=species, pars=pars, fixed=fixed, syst=syst, plot=False,
                                                   levels=self.parent.parent.grid_pars.H2levels,
-                                                  others=self.parent.parent.grid_pars.othermode.currentText())
+                                                  others=self.parent.parent.grid_pars.othermode.currentText(), spmode = spmode)
                 grid = self.parent.parent.H2.grid
                 self.parent.parent.H2.grid['name'] = name
                 #print('grid', grid['uv'], grid['n0'], grid['lnL'])
@@ -525,6 +539,7 @@ class gridParsWidget(QWidget):
         #self.resize(700, 900)
         #self.move(400, 100)
         self.pars = {'n0': 'x', 'uv': 'y', 'me': 'fixed'}
+        #self.pars = {'n0': 'x', 'me': 'y', 'uv': 'fixed'}
         self.parent.H2.setgrid(pars=list(self.pars.keys()), show=False)
         self.cols, self.x_, self.y_, self.z_ = None, None, None, None
 
@@ -569,6 +584,11 @@ class gridParsWidget(QWidget):
         self.species.addItems(['H2', 'CI','CO'])
         self.species.setCurrentIndex(0)
         l.addWidget(self.species)
+        self.spmode = QComboBox(self)
+        self.spmode.setFixedSize(60, 25)
+        self.spmode.addItems(['abs', 'rel'])
+        self.spmode.setCurrentIndex(0)
+        l.addWidget(self.spmode)
         self.H2levels = np.arange(6)
         self.levels = QLineEdit(" ".join([str(i) for i in self.H2levels]))
         self.levels.setFixedSize(90, 30)
@@ -648,7 +668,7 @@ class gridParsWidget(QWidget):
             pass
 
     def compareIt(self):
-        self.parent.H2_systems.table.compare(species=str(self.species.currentText()))
+        self.parent.H2_systems.table.compare(species=str(self.species.currentText()), spmode = str(self.spmode.currentText()))
         self.interpolateIt()
         grid = self.parent.H2.grid
         x, y = np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('x')]]), np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('y')]])
@@ -684,7 +704,7 @@ class gridParsWidget(QWidget):
             if 1:
                 self.cols[s] = Rbf(x, y, np.asarray([c[s] for c in grid['cols']]), function='multiquadric', smooth=0.1)
         for p in mp:
-            self.mpars[p] = Rbf(x, y, np.asarray([c[p] for c in grid['mpars']]), function='multiquadric', smooth=0.1)
+            self.mpars[p] = Rbf(x, y, np.asarray([c[p] for c in grid['mpars']]), function='multiquadric', smooth=0.3)
 
             #rbf = Rbf(x,y,z,function='multiquadric',smooth=0.2)
 
@@ -699,6 +719,8 @@ class gridParsWidget(QWidget):
         sp = grid['cols'][0].keys()
         sp = [s for s in sp if int(s[3:]) in self.H2levels]
         species = {}
+        spmode = str(self.spmode.currentText())
+        spname = str(self.species.currentText())
         # add calc phys cond
         #mp = grid['mpars'][0].keys()
         #mparsgrid = {}
@@ -711,29 +733,35 @@ class gridParsWidget(QWidget):
                 v1.minus, v1.plus = np.sqrt(v1.minus ** 2 + float(self.addSyst.text()) ** 2), np.sqrt(v1.plus ** 2 + float(self.addSyst.text()) ** 2)
             elif kind == 'accurate':
                 v1 *= a(0, float(self.addSyst.text()), float(self.addSyst.text()), 'l')
-            if str(self.species.currentText()) == 'H2':
+            if spmode == 'abs':
                 species[s] = v1
-            elif str(self.species.currentText()) == 'CI':
-                species[s] = v1 / self.parent.H2.comp(grid['name']).e['CIj0'].col.log()
-            elif str(self.species.currentText()) == 'CO':
-                species[s] = v1
+            elif spmode == 'rel':
+                species[s] = v1/self.parent.H2.comp(grid['name']).e[sp[0]].col.log()
+
+#            elif str(self.species.currentText()) == 'CI':
+#                species[s] = v1
+#            elif str(self.species.currentText()) == 'CO':
+#                species[s] = v1
 
 
         if 1:
             others = self.parent.grid_pars.othermode.currentText()
             levels = self.parent.grid_pars.H2levels
+            full_keys = grid['cols'][0].keys()
+            label = spname + 'j{:}'
+            keys = [label.format(i) for i in levels if label.format(i) in full_keys]
+            print('regrid keys',keys)
+            #if str(self.species.currentText()) == 'H2':
+            #    full_keys = grid['cols'][0].keys()
+            #    keys = ['H2j{:}'.format(i) for i in levels if 'H2j{:}'.format(i) in full_keys]
 
-            if str(self.species.currentText()) == 'H2':
-                full_keys = grid['cols'][0].keys()
-                keys = ['H2j{:}'.format(i) for i in levels if 'H2j{:}'.format(i) in full_keys]
+            #if str(self.species.currentText()) == 'CI':
+            #    full_keys = grid['cols'][0].keys()
+            #    keys = ['CIj{:}'.format(i) for i in levels if 'CIj{:}'.format(i) in full_keys]
 
-            if str(self.species.currentText()) == 'CI':
-                full_keys = grid['cols'][0].keys()
-                keys = ['CIj{:}'.format(i) for i in levels if 'CIj{:}'.format(i) in full_keys]
-
-            if str(self.species.currentText()) == 'CO':
-                full_keys = grid['cols'][0].keys()
-                keys = ['COj{:}'.format(i) for i in levels if 'COj{:}'.format(i) in full_keys]
+            #if str(self.species.currentText()) == 'CO':
+            #    full_keys = grid['cols'][0].keys()
+            #    keys = ['COj{:}'.format(i) for i in levels if 'COj{:}'.format(i) in full_keys]
 
             if others in ['lower', 'upper']:
                 for k in full_keys:
@@ -753,17 +781,23 @@ class gridParsWidget(QWidget):
                 lnL = 0
                 for s, v in species.items():
                     if v.type in ['m', 'u', 'l']:
-                        if str(self.species.currentText()) == 'H2':
-                            lnL += v.lnL(self.cols[s](xi, yi))
-                            cols[s][k, i] = self.cols[s](xi, yi)
-
-                        elif str(self.species.currentText()) == 'CI':
-                            cols[s][k, i] = self.cols[s](xi, yi) - self.cols['CIj0'](xi, yi)
-                            lnL += v.lnL(cols[s][k, i])
-
-                        elif str(self.species.currentText()) == 'CO':
+                        if spmode == 'abs':
+                        #if str(self.species.currentText()) == 'H2':
                             cols[s][k, i] = self.cols[s](xi, yi)
                             lnL += v.lnL(cols[s][k, i])
+                        elif spmode == 'rel':
+                            cols[s][k, i] = self.cols[s](xi, yi) - self.cols[spname+'j0'](xi, yi)
+                            lnL += v.lnL(cols[s][k, i])
+                            print('v=', v, 'PDR', cols[s][k, i], '+lnL', v.lnL(cols[s][k, i]))
+                print(xi, yi, lnL)
+                        #elif str(self.species.currentText()) == 'CI':
+                        #    #cols[s][k, i] = self.cols[s](xi, yi) - self.cols['CIj0'](xi, yi)
+                        #    cols[s][k, i] = self.cols[s](xi, yi)
+                        #    lnL += v.lnL(cols[s][k, i])
+                        #
+                        #elif str(self.species.currentText()) == 'CO':
+                        #    cols[s][k, i] = self.cols[s](xi, yi)
+                        #    lnL += v.lnL(cols[s][k, i])
 
                 z[k, i] = lnL
 
@@ -794,7 +828,7 @@ class gridParsWidget(QWidget):
         vmin = 1
         vmax = 3
         cmap = 'Greens'
-        levels = [1, 1.5, 1.7, 2, 2.3]
+        levels = [2.0,2.1]
         pars = []
         for p in mp:
             mparsgrid[p] = np.zeros_like(self.z_)
@@ -807,7 +841,29 @@ class gridParsWidget(QWidget):
             for i, xi in enumerate(self.x_):
                 for k, yi in enumerate(self.y_):
                     for p in mp:
-                        mparsgrid[p][k,i] = np.log10(self.mpars[p](xi, yi))
+                        mparsgrid[p][k,i] = self.mpars[p](xi, yi)
+
+        if 1:
+            p = 'tgas'
+            pmin = np.min(mparsgrid[p])
+            pmax = np.max(mparsgrid[p])
+            #if pmax>1.0e+03:
+            #    pmax = 1.0e+03
+            print('tgas:stat:',pmin, pmax)
+            lp = np.linspace(pmin,pmax,1000)
+            lnL_p = np.zeros_like(lp)
+            lnL = np.exp(self.z_)
+            for i, xi in enumerate(self.x_):
+                for k, yi in enumerate(self.y_):
+                    pval = mparsgrid[p][k,i]
+                    j = np.searchsorted(lp,pval)
+                    lnL_p[j] +=lnL[k][i]
+            lnL_p = lnL_p/np.sum(lnL_p)
+            #print(lp,lnL_p)
+            d = distr1d(lp,lnL_p)
+            d.stats()
+            d.plot()
+
 
         X, Y = np.meshgrid(self.x_, self.y_)
 
@@ -817,19 +873,25 @@ class gridParsWidget(QWidget):
             c = ax.pcolor(X, Y, z, cmap=cmap, vmin=vmin, vmax=vmax)
             ax.contour(self.x_, self.y_, z, levels=levels, colors='black', alpha=1,
                              linestyles=['-'], linewidths=1.0)
-#            d = distr2d(x=self.x_, y=self.y_, z=mparsgrid[p])
-#            dx, dy = d.marginalize('y'), d.marginalize('x')
-#            dx.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('x')])
-#            dy.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('y')])
-#            d.plot(color=None)
+
+        if 1:
+            grid = self.parent.H2.grid
+            x, y = np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('x')]]), np.log10(
+                grid[list(self.pars.keys())[list(self.pars.values()).index('y')]])
+            z = np.asarray([c[p] for c in grid['mpars']])
+
+            for v1, v2, l in zip(x, y, z):
+                ax.text(v1, v2, '{:.1f}'.format(l), size=10, color='black')
+
+
         cax = fig.add_axes([0.93, 0.27, 0.01, 0.47])
-        fig.colorbar(c, cax=cax, orientation='vertical', ticks=[1, 1.5, 1.7, 2, 2.3])
+        fig.colorbar(c, cax=cax, orientation='vertical') #, ticks=[1, 1.5, 1.7, 2, 2.3])
 
         d = distr2d(x=self.x_, y=self.y_, z=np.exp(self.z_))
         dx, dy = d.marginalize('y'), d.marginalize('x')
         dx.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('x')])
         dy.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('y')])
-        d.plot_contour(ax=col, color='blue', color_point=None, cmap=None, alpha=0, lw=1.0, zorder=5)
+        d.plot_contour(ax=ax,color='blue', color_point=None, cmap=None, alpha=0, lw=1.0, zorder=5)
 
 
         plt.show()
@@ -846,7 +908,7 @@ class gridParsWidget(QWidget):
             d.plot(color=None)
 
             plt.show()
-        self.plot_mpars()
+        #self.plot_mpars()
 
     # export likelihood to file: in case of 'H2' in addition plot join fit to 'H2+CI'
     def exportIt(self):
@@ -889,7 +951,7 @@ class gridParsWidget(QWidget):
                         with open('output/{:s}_CI_cols.pkl'.format(self.parent.H2.grid['name']), 'rb') as f:
                             x, y, cols_ci = pickle.load(f)
                     else:
-                        # set uniform prior if CI did not detected
+                        # set uniform prior if CI is not detected
                         prior.append('uni')
                         x = self.x_
                         z_uni = np.zeros([len(self.y_), len(self.x_)])
@@ -936,13 +998,13 @@ class gridParsWidget(QWidget):
                                        lw=2.0)
 
                         # plot excitation for H2
-                        def getatomic(species, levels=[0, 1, 2]):
-                            if species == 'H2':
-                                return [H2energy[0, i] for i in levels], [stat_H2[i] for i in levels]
-                            elif species == 'CI':
-                                return [CIenergy[i] for i in levels], [stat_CI[i] for i in levels]
-                            elif species == 'CO':
-                                return [COenergy[i] for i in levels], [stat_CO[i] for i in levels]
+                        #def getatomic(species, levels=[0, 1, 2]):
+                        #    if species == 'H2':
+                        #        return [H2energy[0, i] for i in levels], [stat_H2[i] for i in levels]
+                        #    elif species == 'CI':
+                        #        return [CIenergy[i] for i in levels], [stat_CI[i] for i in levels]
+                        #    elif species == 'CO':
+                        #        return [COenergy[i] for i in levels], [stat_CO[i] for i in levels]
 
                         species = 'H2'
                         sp = [s for s in q.e.keys() if species + 'j' in s]
@@ -962,11 +1024,17 @@ class gridParsWidget(QWidget):
                             j = np.sort([int(s[3:]) for s in sp if 'v' not in s])
                             x, stat = getatomic(species, levels=j)
                             y = [q.e[species + 'j' + str(i)].col / stat[i] for i in j]
-                            ax_export[2].plot(x, [y[i].val - y[0].val for i in j], 'o')
-                            # j = [0, 1, 2]
-                            x, stat = getatomic(species, levels=j)
                             mod = [cols_ci['CIj' + str(i)](d.point[0], d.point[1]) - np.log10(stat[i]) for i in j]
-                            ax_export[2].plot(x, mod - mod[0])
+                            if str(self.spmode.currentText()) == 'abs':
+                                ax_export[2].plot(x, [y[i].val for i in j], 'o')
+                                ax_export[2].plot(x, mod)
+                            elif str(self.spmode.currentText()) == 'rel':
+                                ax_export[2].plot(x, [y[i].val - y[0].val for i in j], 'o')
+                                ax_export[2].plot(x, mod - mod[0])
+
+                            #x, stat = getatomic(species, levels=j)
+                            #mod = [cols_ci['CIj' + str(i)](d.point[0], d.point[1]) - np.log10(stat[i]) for i in j]
+                            #ax_export[2].plot(x, mod - mod[0])
 
                 if str(self.plot_model_set.currentText()) == 'H2+CO':
                     q = self.parent.H2.comp(self.parent.H2.grid['name'])
@@ -1027,13 +1095,13 @@ class gridParsWidget(QWidget):
                                        lw=2.0)
 
                         # plot excitation for H2
-                        def getatomic(species, levels=[0, 1, 2]):
-                            if species == 'H2':
-                                return [H2energy[0, i] for i in levels], [stat_H2[i] for i in levels]
-                            elif species == 'CI':
-                                return [CIenergy[i] for i in levels], [stat_CI[i] for i in levels]
-                            elif species == 'CO':
-                                return [COenergy[i] for i in levels], [stat_CO[i] for i in levels]
+                        #def getatomic(species, levels=[0, 1, 2]):
+                        #    if species == 'H2':
+                        #        return [H2energy[0, i] for i in levels], [stat_H2[i] for i in levels]
+                        #    elif species == 'CI':
+                        #        return [CIenergy[i] for i in levels], [stat_CI[i] for i in levels]
+                        #    elif species == 'CO':
+                        #        return [COenergy[i] for i in levels], [stat_CO[i] for i in levels]
 
                         species = 'H2'
                         sp = [s for s in q.e.keys() if species + 'j' in s]
@@ -1052,140 +1120,20 @@ class gridParsWidget(QWidget):
                             j = np.sort([int(s[3:]) for s in sp if 'v' not in s])
                             x, stat = getatomic(species, levels=j)
                             y = [q.e[species + 'j' + str(i)].col / stat[i] for i in j]
-                            ax_export[2].plot(x, [y[i].val for i in j], 'o')
-                            x, stat = getatomic(species, levels=j)
                             mod = [cols_co['COj' + str(i)](d.point[0], d.point[1]) - np.log10(stat[i]) for i in j]
-                            ax_export[2].plot(x, mod)
+                            if str(self.spmode.currentText()) == 'abs':
+                                ax_export[2].plot(x, [y[i].val for i in j], 'o')
+                                ax_export[2].plot(x, mod)
+                            elif str(self.spmode.currentText()) == 'rel':
+                                ax_export[2].plot(x, [y[i].val - y[0].val for i in j], 'o')
+                                ax_export[2].plot(x, mod - mod[0])
+                            #ax_export[2].plot(x, [y[i].val for i in j], 'o')
+                            #x, stat = getatomic(species, levels=j)
+                            #mod = [cols_co['COj' + str(i)](d.point[0], d.point[1]) - np.log10(stat[i]) for i in j]
+                            #ax_export[2].plot(x, mod)
 
                 plt.show()
 
-            if 0:
-
-                q = self.parent.H2.comp(self.parent.H2.grid['name'])
-                sp = [s for s in q.e.keys()]
-                prior = []
-                if 'CIj1' in sp:
-                    prior.append('ci')
-                    with open('output/{:s}_CI_lnL.pkl'.format(self.parent.H2.grid['name']), 'rb') as f:
-                        x, y, z_ci = pickle.load(f)
-                    with open('output/{:s}_CI_cols.pkl'.format(self.parent.H2.grid['name']), 'rb') as f:
-                        x, y, cols_ci = pickle.load(f)
-                else:
-                    # set uniform prior if CI did not detected
-                    prior.append('uni')
-                    x = self.x_
-                    z_uni = np.zeros([len(self.y_), len(self.x_)])
-                if 'COj2' in sp:
-                    prior.append('co')
-                    with open('output/{:s}_CO_lnL.pkl'.format(self.parent.H2.grid['name']), 'rb') as f:
-                        x, y, z_co = pickle.load(f)
-                    with open('output/{:s}_CO_cols.pkl'.format(self.parent.H2.grid['name']), 'rb') as f:
-                        x, y, cols_co = pickle.load(f)
-
-
-                if 'ci' in prior:
-                    z_prior = z_ci
-                elif 'uni' in prior:
-                    z_prior = z_uni
-
-                # create a join likelihood (H2 + prior)
-                d = distr2d(x=self.x_, y=self.y_, z=np.exp(self.z_ + z_prior))
-                d.dopoint()
-                print('min chi2 coords:',d.point[0],d.point[1])
-                name = 'output/{:s}_join_lnL.pkl'
-                # save a join likelihood
-                with open(name.format(self.parent.H2.grid['name']), 'wb') as f:
-                    pickle.dump([self.x_, self.y_, self.z_ + z_prior], f)
-
-                # show join likelihood and excitation plots
-                if 1:
-                    fig_ex, ax_export = plt.subplots(1, 4, figsize=(9, 2))
-
-                    # plot contours for the join constraint
-                    d = distr2d(x=self.x_, y=self.y_, z=np.exp(self.z_))
-                    dx, dy = d.marginalize('y'), d.marginalize('x')
-                    dx.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('x')])
-                    dy.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('y')])
-                    d.plot_contour(ax=ax_export[0],  color='black', color_point=None, cmap='Purples', alpha=0, lw=2.0)
-
-                    d = distr2d(x=self.x_, y=self.y_, z=np.exp(z_prior))
-                    dx, dy = d.marginalize('y'), d.marginalize('x')
-                    dx.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('x')])
-                    dy.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('y')])
-                    d.plot_contour(ax=ax_export[0], color='black', color_point=None, cmap='Greens', alpha=0, lw=2.0)
-
-                    print('CI+H2 likelihood')
-                    d = distr2d(x=self.x_, y=self.y_, z=np.exp(self.z_ + z_prior))
-                    dx, dy = d.marginalize('y'), d.marginalize('x')
-                    dx.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('x')])
-                    dy.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('y')])
-                    d.plot_contour(ax=ax_export[0], color='black', color_point=None, cmap='Reds', alpha=0, lw=2.0)
-
-                    if 'co' in prior:
-                        dco = distr2d(x=self.x_, y=self.y_, z=np.exp(z_co))
-                        dx, dy = dco.marginalize('y'), dco.marginalize('x')
-                        dx.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('x')])
-                        dy.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('y')])
-                        dco.plot_contour(ax=ax_export[0], color='black', color_point=None, cmap='Blues', alpha=0, lw=2.0)
-                        print('CO+H2 likelihood')
-                        dco = distr2d(x=self.x_, y=self.y_, z=np.exp(z_co+self.z_))
-                        dx, dy = dco.marginalize('y'), dco.marginalize('x')
-                        dx.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('x')])
-                        dy.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('y')])
-                        dco.plot_contour(ax=ax_export[0], color='black', color_point=None, cmap='Oranges', alpha=0,
-                                         lw=2.0)
-
-                    # plot excitation for H2
-                    def getatomic(species, levels=[0, 1, 2]):
-                        if species == 'H2':
-                            return [H2energy[0, i] for i in levels], [stat_H2[i] for i in levels]
-                        elif species == 'CI':
-                            return [CIenergy[i] for i in levels], [stat_CI[i] for i in levels]
-                        elif species == 'CO':
-                            return [COenergy[i] for i in levels], [stat_CO[i] for i in levels]
-
-                    species = 'H2'
-                    sp = [s for s in q.e.keys() if species + 'j' in s]
-                    j = np.sort([int(s[3:]) for s in sp if 'v' not in s])
-                    x, stat = getatomic(species, levels=j)
-                    y = [q.e[species + 'j' + str(i)].col / stat[i] for i in j]
-                    ax_export[1].plot(x, [y[i].val for i in j], 'o')
-                    #j = [0,1,2,3,4,5,6]
-                    x, stat = getatomic(species, levels=j)
-                    mod = [self.cols['H2j' + str(i)](d.point[0], d.point[1]) - np.log10(stat[i]) for i in j]
-                    ax_export[1].plot(x,mod)
-
-
-
-                    # plot excitation for CI
-                    if 'ci' in prior:
-                        species = 'CI'
-                        sp = [s for s in q.e.keys() if species + 'j' in s]
-                        j = np.sort([int(s[3:]) for s in sp if 'v' not in s])
-                        x, stat = getatomic(species, levels=j)
-                        y = [q.e[species + 'j' + str(i)].col / stat[i] for i in j]
-                        ax_export[2].plot(x, [y[i].val - y[0].val for i in j], 'o')
-                        #j = [0, 1, 2]
-                        x, stat = getatomic(species, levels=j)
-                        mod = [cols_ci['CIj' + str(i)](d.point[0], d.point[1]) - np.log10(stat[i]) for i in j]
-                        ax_export[2].plot(x, mod-mod[0])
-
-                    # plot excitation for CO
-                    if 'co' in prior:
-                        species = 'CO'
-                        sp = [s for s in q.e.keys() if species + 'j' in s]
-                        j = np.sort([int(s[3:]) for s in sp if 'v' not in s])
-                        x, stat = getatomic(species, levels=j)
-                        y = [q.e[species + 'j' + str(i)].col / stat[i] for i in j]
-                        ax_export[3].plot(x, [y[i].val - y[0].val for i in j], 'o')
-                        #j = [0, 1, 2,3,4,5,6]
-                        x, stat = getatomic(species, levels=j)
-                        mod = [cols_co['COj' + str(i)](dco.point[0], dco.point[1]) - np.log10(stat[i]) for i in j]
-                        ax_export[3].plot(x, mod - mod[0])
-
-
-
-                plt.show()
 
 
     def tableIt(self):
@@ -1223,6 +1171,7 @@ class gridParsWidget(QWidget):
         self.pars[par] = b
         if b is 'fixed':
             print(getattr(self, par + '_val').text())
+            print(getattr(self, par + '_val').text())
             self.pars[par] = getattr(self, par + '_val').currentText()
         #print(self.pars)
 
@@ -1231,8 +1180,10 @@ class H2viewer(QMainWindow):
     def __init__(self):
         super().__init__()
         #self.H2 = H2_exc(folder='data_z0.3') #h2_uv177_n_17_7_z0_31_s_25.hdf5', 'h2_uv0_1_n_1_z0_31_s_25.hdf5', 'h2_uv5_62_n_5_62_z0_31_s_23.hdf5
-        self.H2 = H2_exc(folder='data/sample/1_5_4/co_grid/', H2database='MW') #z0_1
-        #self.H2 = H2_exc(folder='data/sample/1_5_4/COsample', H2database='MW')
+        #self.H2 = H2_exc(folder='data/sample/1_5_4/av2_0_cmb0_0_z0_3_n_uv/', H2database='MW') #z0_1
+        #self.H2 = H2_exc(folder='data/sample/1_5_4/av0_5_cmb2_5_z0_1_n_uv', H2database='MW')
+        #self.H2 = H2_exc(folder='data/sample/1_5_4/av2_0_cmb0_0_z1_0_n_uv', H2database='MW')
+        self.H2 = H2_exc(folder='data/sample/1_5_4/co_grid', H2database='MW')
         self.H2.readfolder()
         self.initStyles()
         self.initUI()

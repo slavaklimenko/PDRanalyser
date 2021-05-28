@@ -66,7 +66,7 @@ spcode = {'H': 'n_h', 'H2': 'n_h2', 'H+': 'n_hp', 'He': 'n_he',
           'H2j4': 'pop_h2_v0_j4', 'H2j5': 'pop_h2_v0_j5', 'H2j6': 'pop_h2_v0_j6', 'H2j7': 'pop_h2_v0_j7',
           'H2j8': 'pop_h2_v0_j8', 'H2j9': 'pop_h2_v0_j9', 'H2j10': 'pop_h2_v0_j10',
           'D': 'n_d', 'D+': 'n_dp', 'HD': 'n_hd', 'HDj0': 'pop_hd_v0_j0', 'HDj1': 'pop_hd_v0_j1', 'HDj2': 'pop_hd_v0_j2',
-          'C': 'n_c', 'C+': 'n_cp', 'CO': 'n_co','C13O': 'n_13co', 'C2': 'n_c2',
+          'CI': 'n_c', 'C+': 'n_cp', 'CO': 'n_co','C13O': 'n_13co', 'C2': 'n_c2',
           'COj0': 'pop_co_v0_j0','COj1': 'pop_co_v0_j1','COj2': 'pop_co_v0_j2','COj3': 'pop_co_v0_j3',
           'COj4': 'pop_co_v0_j4', 'COj5': 'pop_co_v0_j5', 'COj6': 'pop_co_v0_j6', 'COj7': 'pop_co_v0_j7',
           'el': 'n_electr', 'O': 'n_o', 'O+': 'n_op',
@@ -220,11 +220,6 @@ class model():
 
         self.readspecies()
 
-
-        if 0:
-            self.plot_phys_cond(pars=['tgas', 'n'], parx='av', logx=False)
-            #self.plot_profiles()
-
         if show_meta:
             self.showMetadata()
 
@@ -319,7 +314,7 @@ class model():
             f.close()
 
     def plot_model(self,  parx='av', pars=['tgas', 'n', 'av','h2t01'], excs = None, species=None, logx=False, logy=True,
-                   legend=True, limit=None):
+                   legend=True, limit=None,borders=None):
         """
         Plot the model quantities
 
@@ -368,6 +363,35 @@ class model():
 
         if excs is not None:
             self.plot_exciation(ax=ax[n+1+m+k],logN=excs)
+
+        if 1:
+            #plot h2fr border
+            for axs in ax:
+                mask_fr = self.h2<self.h2[-1]/2
+                mask_fr *= self.h2fr < 0.1
+                v = np.log10(self.h2[mask_fr][-1])
+                print('h2fr border:', v)
+                axs.axvline(x=v, ls='--', color='purple', alpha=0.7)
+
+                mask_fr = self.h2 < self.h2[-1] / 2
+                mask_fr *= 2*self.h2/(2*self.h2+self.hi) < 0.1
+                v = np.log10(self.h2[mask_fr][-1])
+                print('h2fr border:', v)
+                axs.axvline(x=v, ls='-.', color='purple', alpha=0.7)
+
+
+        if borders is not None:
+            print(borders)
+            if v is not None:
+                for k in borders.keys():
+                    self.set_mask(logN={k:borders[k]}, sides=2)
+                    v = np.log10(self.h2[self.mask][-1])
+                    print(k, v)
+                    if k == 'H2': color = 'black'
+                    if k == 'CO': color = 'magenta'
+                    if k == 'CI': color = 'red'
+                    for axs in ax:
+                        axs.axvline(x=v, ls='--', color=color,alpha=0.7)
 
         #fig.suptitle(str(('n0=', self.n0, 'uv=', self.uv, 'me=',self.me, 'zeta=', self.zeta)), fontsize=14)
         fig.suptitle(self.name, fontsize=14)
@@ -461,11 +485,17 @@ class model():
 
             if p in ['tgas', 'n', 'av', 'pgas','h2t01','uv_dens','uv_flux','H2_photo_dest_prob','OPR','h2fr']:
                 y = getattr(self, p)[mask]
-                if p in ['h2t01']:
-                    print(getattr(self, p)[mask])
-                    bot, top = 10, 1e3
-                if p in ['pgas']:
-                    y = y/1e2
+            elif p == 'tgas_m':
+                y = []
+                for x0 in self.x[mask]:
+                    mask_loc=self.x<x0
+                    mask_loc*=self.h2fr>0.001
+                    if np.size(self.x[mask_loc])>1:
+                        y.append(np.trapz(self.tgas[mask_loc], x=self.x[mask_loc])/(self.x[mask_loc][-1]-self.x[mask_loc][0]))
+                    else:
+                        y.append(0)
+                y = np.array(y)
+                ls = '--'
             elif p == 'Nh2t01':
                 y = (self.sp['NH2j1'][mask]) / \
                     (self.sp['NH2j0'][mask])
@@ -531,11 +561,6 @@ class model():
                 axi.set_ylabel(ylabel, color=color,fontsize=14)
             line, = axi.plot(x, y, color=color, label=p, ls=ls)
             lines.append(line)
-            print(p,yscale)
-
-            if p in ['OPR_logNJ1/J02','Nh2t02']:
-                #ax.axvline(self.calc_T01_limit(limith2={'H2': 21.5},case=3),ls='--')
-                ax.axvline(self.calc_T01_limit(limith2={'H2': 21.5},case=1), ls='--',color='green')
 
             if 1:
                 axi.tick_params(which='both', width=1, direction='in', right='True', top='True')
@@ -666,8 +691,8 @@ class model():
                 ax.plot(x, np.log10(y), ls=ls, label=s, lw=lw, linewidth=2.0)
             else:
                 ax.plot(x, y, ls=ls, label=s, lw=lw, linewidth=2.0)
-            if s in ['H2j1/H2']:
-                ax.axvline(self.calc_T01_limit(limith2={'H2': 21.5}, case=1), ls='--', color='green')
+            #if s in ['H2j1/H2']:
+            #    ax.axvline(self.calc_T01_limit(limith2={'H2': 21.5}, case=1), ls='--', color='green')
 
         if ylabel:
             ax.set_ylabel(label, fontsize=12)
@@ -760,10 +785,9 @@ class model():
             self.mask = cols < logN[list(logN.keys())[0]]
         else:
             self.mask = cols > -1
-        #return np.searchsorted(cols, value)
-        #print('av_max:', self.av[self.mask][-1])
 
     def lnLike(self, species={}, syst=0, verbose=False, relative=None):
+        print(species, relative)
         lnL = 0
         if 0:
             #verbose:
@@ -775,6 +799,8 @@ class model():
             else:
                 v1 = v / species[relative]
                 s = self.cols[k] - self.cols[relative]
+                #print('v1:', v1)
+                #print('s:', s)
 
             if syst > 0:
                 v1 *= a(0, syst, syst, 'l')
@@ -786,7 +812,7 @@ class model():
         self.lnL = lnL
         return self.lnL
 
-    def calc_mean_pars(self, pars=['tgas'], logN=None, sides=2):
+    def calc_mean_pars(self, pars=['tgas'], logN=None, sides=2,logscale=True):
         """
         Calculate mean values of phys parameters for given column density
 
@@ -809,64 +835,24 @@ class model():
                 if p in ['T01']:
                     mpars[p] = 0
                 else:
-                    mpars[p] = np.trapz(getattr(self, p)[self.mask], x=self.x[self.mask])/self.x[self.mask][-1]
+                    #self.mask *= 2 * self.h2 / (2 * self.h2 + self.hi) < 0.01
+                    #mpars[p] = np.trapz(getattr(self, p)[self.mask], x=self.x[self.mask])/(self.x[self.mask][-1]-self.x[self.mask][0])
+                    if logscale:
+                        mpars[p] = np.log10(getattr(self, p)[self.mask][-1])
+                    else:
+                        mpars[p] = getattr(self, p)[self.mask][-1]
+                    #print(p,mpars[p])
         else:
             for p in pars:
                 if p in ['av']:
                     mpars[p] = 0
                 else:
-                    mpars[p] = np.array(integrate.cumtrapz(getattr(self, p), x=self.x))/self.x[-1]
+                    #mpars[p] = np.array(integrate.cumtrapz(getattr(self, p), x=self.x))/self.x[-1]
+                    mpars[p] = np.array(integrate.cumtrapz(getattr(self, p), x=self.x)) / self.x[-1]
 
         self.mpars = mpars
         return self.mpars
 
-#    def calc_Hp(self):
-#        """
-#        Calculate H+ formation and destruction rates
-#
-#        :return: sp
-#            -  sp            :  dictionary of the column densities by species
-#        """
-#
-#
-#        species = ['O','O+','H','H+','H2','He+']
-#        k_ohp = 1.4e-010
-#        k_oph = 4.4e-010
-#        k_heph2 = 2.9e-014
-#        k_h2cr = 4.0e-019
-#        k_hcr = 4.6e-018
-#        zeta = self.zeta/1e-017
-#
-#
-#        cols = OrderedDict()
-#
-#        for s in species:
-#            cols[s] = self.sp[s]
-#
-#        form = cols['H']*cols['O+']*k_oph + cols['H2']*cols['He+']*k_heph2 + zeta*(cols['H2']*k_h2cr + cols['H']*k_hcr)
-#        destr = cols['O']*k_ohp
-#
-#        #, x=self.x))
-#
-#        self.sp['hp'] = form/destr
-#
-#        if 1:
-#            fig, ax = plt.subplots(2,1,figsize=(6, 12))
-#            ax[0].plot(self.x, cols['H']*cols['O+']*k_oph,label='formation:   O+ + H')
-#            ax[0].plot(self.x, cols['H2']*cols['He+']*k_heph2,label='formation:   H2 + He+')
-#            ax[0].plot(self.x, zeta*(cols['H2']*k_h2cr + cols['H']*k_hcr),label='formation:   H + CR')
-#            ax[0].plot(self.x, cols['O']*k_ohp*cols['H+'],label='destruction:  O + H+')
-#            ax[0].legend()
-#            ax[0].set_yscale('log')
-#            ax[0].set_xscale('log')
-#            ax[0].set_ylim(1e-18,1e-12)
-#            ax[1].plot(self.x, self.sp['hp']/self.n0,label='h+_theory')
-#            ax[1].plot(self.x, self.sp['H+']/self.n0,label='H+ profile')
-#            ax[1].legend()
-#            ax[1].set_yscale('log')
-#            ax[1].set_xscale('log')
-#            ax[1].set_ylim(1e-7, 1e0)
-#            fig.suptitle(str(('n0=', self.n0, 'uv=', self.uv, 'me=', self.me, 'zeta=', self.zeta)), fontsize=14)
 
     def calc_T01_limit(self, parx='h2', limith2={'H2': 21.5}, logx=True,case=1):
         """calculate the H2 column density, where
@@ -937,7 +923,7 @@ class model():
                 logNH2_th = 21
             else:
                 logNH2_th = x[mask1][0]
-            print('logNH2_th:', logNH2_th)
+            #print('logNH2_th:', logNH2_th)
             return logNH2_th
         elif case == 2:
             # compare tkin and t01h2
@@ -955,7 +941,7 @@ class model():
                 logNH2_th = 21
             else:
                 logNH2_th = x[mask][0]
-            print('logNH2_th:',logNH2_th)
+            #print('logNH2_th:',logNH2_th)
             return logNH2_th
         elif case == 3:
             # compare tkin and t01h2
@@ -979,14 +965,14 @@ class model():
                 logNH2_th = 21
             else:
                 logNH2_th = x[mask][1]
-            print('logNH2_th:',logNH2_th)
+            #print('logNH2_th:',logNH2_th)
             return logNH2_th
 
 class H2_exc():
     def __init__(self, folder='', H2database='all'):
         self.folder = folder if folder.endswith('/') else folder + '/'
         self.models = {}
-        self.species = ['H', 'H+', 'H2', 'C', 'C+', 'CO', 'C2', 'C13O', 'H2j0', 'H2j1', 'H2j2', 'H2j3', 'H2j4', 'H2j5', 'H2j6', 'H2j7', 'H2j8', 'H2j9', 'H2j10',
+        self.species = ['H', 'H+', 'H2', 'CI', 'C+', 'CO', 'C2', 'C13O', 'H2j0', 'H2j1', 'H2j2', 'H2j3', 'H2j4', 'H2j5', 'H2j6', 'H2j7', 'H2j8', 'H2j9', 'H2j10',
                         'COj0','COj1','COj2','COj3','COj4','COj5','COj6','COj7',
                         'NH','NH2', 'NH2j0', 'NH2j1', 'NH2j2', 'NH2j3', 'NH2j4', 'NH2j5', 'NH2j6', 'NH2j7', 'NH2j8', 'NH2j9', 'NH2j10',
                         'NCI','NCj0', 'NCj1', 'NCj2',
@@ -1169,7 +1155,7 @@ class H2_exc():
 
         return models
 
-    def compare(self, object='', species='H2', pars = ['tgas'], models='current', syst=0.0, levels=[], others='ignore'):
+    def compare(self, object='', species='H2', spmode = 'abs', mpars = ['tgas'], models='current', syst=0.0, levels=[], others='ignore'):
         """
         Calculate the column densities of H2 rotational levels for the list of models given the total H2 column density.
         and also log of likelihood
@@ -1187,10 +1173,12 @@ class H2_exc():
         """
 
         q = self.comp(object)
-        if species == 'H2':
+        if species in ['H2', 'CI', 'CO']:
             if len(levels) > 0:
-                full_keys = [s for s in q.e.keys() if ('H2j' in s) and ('v' not in s)]
-                keys = ['H2j{:}'.format(i) for i in levels if 'H2j{:}'.format(i) in full_keys]
+                label = species + 'j'
+                full_keys = [s for s in q.e.keys() if (label in s) and ('v' not in s)]
+                label = species + 'j{:}'
+                keys = [label.format(i) for i in levels if label.format(i) in full_keys]
                 spec = OrderedDict([(s, q.e[s].col * a(0.0, syst, syst)) for s in keys])
                 if others in ['lower', 'upper']:
                     for k in full_keys:
@@ -1200,48 +1188,82 @@ class H2_exc():
                                 spec[k] = a(v.val - v.minus, t=others[0])
                             else:
                                 spec[k] = a(v.val + v.plus, t=others[0])
-            #print(spec)
-        elif species == 'CI':
-            if len(levels) > 0:
-                full_keys = [s for s in q.e.keys() if ('CIj' in s) and ('v' not in s)]
-                keys = ['CIj{:}'.format(i) for i in list(set(levels) & set([0, 1, 2]))  if 'CIj{:}'.format(i) in full_keys]
-                print(keys)
-            spec = OrderedDict([(s, q.e[s].col * a(0.0, syst, syst)) for s in full_keys])
+        #if species == 'H2':
+        #    if len(levels) > 0:
+        #        full_keys = [s for s in q.e.keys() if ('H2j' in s) and ('v' not in s)]
+        #        keys = ['H2j{:}'.format(i) for i in levels if 'H2j{:}'.format(i) in full_keys]
+        #        spec = OrderedDict([(s, q.e[s].col * a(0.0, syst, syst)) for s in keys])
+        #        if others in ['lower', 'upper']:
+        #            for k in full_keys:
+        #                if k not in keys:
+        #                    v = q.e[k].col * a(0.0, syst, syst)
+        #                    if others == 'lower':
+        #                        spec[k] = a(v.val - v.minus, t=others[0])
+        #                    else:
+        #                        spec[k] = a(v.val + v.plus, t=others[0])
+        #    #print(spec)
+        #elif species == 'CI':
+        #    if len(levels) > 0:
+        #        full_keys = [s for s in q.e.keys() if ('CIj' in s) and ('v' not in s)]
+        #        keys = ['CIj{:}'.format(i) for i in list(set(levels) & set([0, 1, 2]))  if 'CIj{:}'.format(i) in full_keys]
+        #        print(keys)
+        #    spec = OrderedDict([(s, q.e[s].col * a(0.0, syst, syst)) for s in full_keys])
 
-        elif species == 'CO':
-            if len(levels) > 0:
-                full_keys = [s for s in q.e.keys() if ('COj' in s) and ('v' not in s)]
-                keys = ['COj{:}'.format(i) for i in levels if 'COj{:}'.format(i) in full_keys]
-                spec = OrderedDict([(s, q.e[s].col * a(0.0, syst, syst)) for s in keys])
-                if others in ['lower', 'upper']:
-                    for k in full_keys:
-                        if k not in keys:
-                            v = q.e[k].col * a(0.0, syst, syst)
-                            if others == 'lower':
-                                spec[k] = a(v.val - v.minus, t=others[0])
-                            else:
-                                spec[k] = a(v.val + v.plus, t=others[0])
+        #elif species == 'CO':
+        #    if len(levels) > 0:
+        #        full_keys = [s for s in q.e.keys() if ('COj' in s) and ('v' not in s)]
+        #        keys = ['COj{:}'.format(i) for i in levels if 'COj{:}'.format(i) in full_keys]
+        #        spec = OrderedDict([(s, q.e[s].col * a(0.0, syst, syst)) for s in keys])
+        #        if others in ['lower', 'upper']:
+        #            for k in full_keys:
+        #                if k not in keys:
+        #                    v = q.e[k].col * a(0.0, syst, syst)
+        #                    if others == 'lower':
+        #                        spec[k] = a(v.val - v.minus, t=others[0])
+        #                    else:
+        #                        spec[k] = a(v.val + v.plus, t=others[0])
 
 
         for model in self.listofmodels(models):
-            logN = {'CO': q.e['CO'].col.val} #if species == 'CO' else logN = {'H2': q.e['H2'].col.val}
+            if spmode == 'abs':
+                relative = None
+                logN = {species: q.e[species].col.val}
+            elif spmode == 'rel':
+                relative = species+'j0'
+                logN = {'H2': q.e['H2'].col.val}
+#            if species == 'CO':
+#                logN = {'CO': q.e['CO'].col.val}
+#            elif species == 'H2':
+#                logN = {'H2': q.e['H2'].col.val}
+#            elif species == 'CI':
+ #               logN = {'CI': q.e['Ci'].col.val}
             model.calc_cols(spec.keys(), logN=logN)
-            relative = 'CIj0' if species == 'CI' else None
-            #relative = None
             #model.lnLike(OrderedDict([(s, q.e[s].col * a(0.0, syst, syst)) for s in keys]), relative=relative)
             model.lnLike(spec, relative=relative)
-            if pars is not None:
-                model.calc_mean_pars(pars=pars, logN={'H2': q.e['H2'].col.val})
+            if mpars is not None:
+                model.calc_mean_pars(pars=mpars, logN={'H2': q.e['H2'].col.val})
 
-    def comparegrid(self, object='0643', species='H2', pars=[], fixed={}, syst=0.0, plot=True, show_best=True, levels='all', others='ignore'):
+    def comparegrid(self, object='0643', species='H2', spmode = 'abs', pars=[], fixed={}, syst=0.0, plot=True, show_best=True, levels='all', others='ignore'):
         self.setgrid(pars=pars, fixed=fixed, show=False)
-        self.grid['NH2tot'] = self.comp(object).e['H2'].col.val
-        print(others)
-        self.compare(object, species=species, models=self.mask, syst=syst, levels=levels, others=others)
+        for el in ['H2', 'CI', 'CO']:
+            if el in self.comp(object).e.keys():
+                self.grid['N'+el+'tot'] = self.comp(object).e[el].col.val
+            else:
+                self.grid['N' + el + 'tot'] = None
+                #if 'CO' in self.comp(object).e.keys():
+        #    self.grid['NCOtot'] = self.comp(object).e['CO'].col.val
+        #else:
+        #    self.grid['NCOtot'] = None
+        #if 'CI' in self.comp(object).e.keys():
+        #    self.grid['NCItot'] = self.comp(object).e['CI'].col.val
+        #else:
+        #    self.grid['NCItot'] = None
+        #print(others)
+        self.compare(object, species=species, spmode = spmode, models=self.mask, syst=syst, levels=levels, others=others)
         self.grid['lnL'] = np.asarray([self.models[m].lnL for m in self.mask])
         self.grid['cols'] = np.asarray([self.models[m].cols for m in self.mask])
         self.grid['mpars'] = np.asarray([self.models[m].mpars for m in self.mask])
-        print(self.grid)
+        #print(self.grid)
 
         if plot:
             if len(pars) == 1:
@@ -1305,8 +1327,8 @@ class H2_exc():
                 stat = stat_CO
             if syst is not None:
                 y = [q.e[sort + str(i)].col*a(0.0, syst, syst) / stat[i] for i in j]
-                if species == 'CI':
-                    y = [(q.e[sort + str(i)].col/q.e[sort + '0'].col)*a(0.0, syst, syst)  / stat[i] for i in j]
+                #if species == 'CI':
+                #    y = [(q.e[sort + str(i)].col/q.e[sort + '0'].col)*a(0.0, syst, syst)  / stat[i] for i in j]
             else:
                 y = [q.e[sort + str(i)].col/ stat[i] for i in j]
             typ = [q.e[sort + str(i)].col.type for i in j]
@@ -1502,11 +1524,13 @@ class H2_exc():
                     ax.scatter(v1, v2, 0)
                     ax.text(v1, v2, '{:.1f}'.format(l), size=20)
 
-    def calc_pars_grid(self,pars = [], models='current'):
+    def calc_pars_grid(self,pars = [], models='current', logN = {'H2': 20}):
         self.setgrid(pars=pars, show=False)
         for m in self.mask:
-            self.models[m].calc_mean_pars(pars=['tgas','pgas','T01'], logN={'H2': 20})
+            self.models[m].calc_mean_pars(pars=['tgas','pgas','T01'], logN=logN)
         self.grid['mpars'] = np.asarray([self.models[m].mpars for m in self.mask])
+
+
 
 if __name__ == '__main__':
     import sys
@@ -1553,19 +1577,22 @@ if __name__ == '__main__':
                 num = 100
                 xmin, xmax, ymin, ymax = np.min(x) - delta, np.max(x) + delta, np.min(y) - delta, np.max(y) + delta
                 x1, y1 = x, y
+                z1 = np.zeros_like(x1)
+                for i, xi in enumerate(x):
+                    z1[i] = H2.mpars['tgas'](xi,y[i])
                 x, y = np.linspace(xmin, xmax, num), np.linspace(ymin, ymax, num)
                 X, Y = np.meshgrid(x, y)
                 z = np.zeros_like(X)
                 for i, xi in enumerate(x):
                     for k, yi in enumerate(y):
-                        z[k, i] = np.log10(H2.mpars['tgas'](xi, yi))
+                        z[k, i] = H2.mpars['tgas'](xi, yi)
                 if 1:
                     fig, ax = plt.subplots()
                     c = ax.pcolor(X, Y, z, cmap='Purples') #, vmin=1.0, vmax=4.0)
                     cax = fig.add_axes([0.93, 0.27, 0.01, 0.47])
                     fig.colorbar(c, cax=cax, orientation='vertical') #, ticks=[-3, -2.5, -2, -1.5])
-                    #for v1, v2, l in zip(x1, y1, z1):
-                    #    ax.text(v1, v2, '{:.1f}'.format(l), size=10, color='black')
+                    for v1, v2, l in zip(x1, y1, z1):
+                        ax.text(v1, v2, '{:.1f}'.format(l), size=10, color='black')
                     ax.set_xlabel('log nH')
                     ax.set_ylabel('log Iuv')
 
