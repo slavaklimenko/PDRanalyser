@@ -119,7 +119,6 @@ class plotExc(pg.PlotWidget):
                 print(y)
             #if species == 'CI':
             #    y = [(q.e[species + 'j' + str(i)].col/q.e['CIj0'].col)/ stat[i] for i in j]
-            #if species == 'CO':
             #    y = [(q.e[species + 'j' + str(i)].col) / stat[i] for i in j]
             self.view[name] = [pg.ErrorBarItem(x=np.asarray(x), y=column(y, 'v'), top=column(y, 'p'), bottom=column(y, 'm'), beam=2),
                                pg.ScatterPlotItem(x, column(y, 'v'), symbol='o', size=15)]
@@ -159,6 +158,26 @@ class plotExc(pg.PlotWidget):
             except:
                 pass
 
+
+    def add_cmb(self, cols=None, cols0=None, redshift=0, add=True):
+        if add:
+            species = str(self.parent.grid_pars.species.currentText())
+            spmode = str(self.parent.grid_pars.spmode.currentText())
+            tcmb = 2.725*(1+redshift)
+            j = np.sort([int(s[3:]) for s in cols.keys()])
+            x, stat = self.getatomic(species, levels=j)
+            mod = [cols0 -np.log10(stat[i]) + np.log10(np.exp(-x[i] / (tcmb / 1.428))) for i in j]
+            if spmode == 'rel':
+                mod -= mod[0]
+            self.temp_cmb = pg.PlotCurveItem(x, mod)
+            self.vb.addItem(self.temp_cmb)
+            self.redraw()
+        else:
+            try:
+                self.vb.removeItem(self.temp_cmb)
+                self.legend_model.removeItem(self.temp_cmb)
+            except:
+                pass
 
     def add_temp(self, cols=None, pars=None, add=True):
         if add:
@@ -254,19 +273,38 @@ class textLabel(pg.TextItem):
     def plot_model(self):
         #print(self.parent.parent.H2.grid['NH2tot'])
         m = self.parent.parent.H2.listofmodels(self.name)[0]
+        borders = {}
+        for el in ['H2', 'CI', 'CO']:
+            if self.parent.parent.H2.grid['N' + el + 'tot'] is not None:
+                borders[el] = self.parent.parent.H2.grid['N' + el + 'tot']-0.3
+            else:
+                borders[el] = None
+        print('borders:',borders)
         #m.plot_model(parx='h2', pars=[['tgas','n','pgas'],['heat_phel','heat_h2','heat_tot'],['cool_h2','cool_o','cool_elrec','cool_tot','cool_cp']],
         #             species=[['H2j0/H2', 'H2j1/H2', 'H2j2/H2','H2j3/H2', 'H2j4/H2'],['H','H2','H+','el','C']],
         #             logx=True, logy=True, limit={'H2': self.parent.parent.H2.grid['NH2tot'] -0.3 }) #, limit={'H2':21} #['OPR','OPR_logNJ1/J02','OPR_logNJ1/J0'],['uv_dens'],['H2_dest_rate'],
-        m.plot_model(parx='h2', pars=[['tgas','Nh2t01','Nh2t02','tgas_m']],
-                     species=[['H2j0/H2', 'H2j1/H2', 'H2j2/H2','H2j3/H2', 'H2j4/H2'],['NH', 'NH2','NCI','NCO'],
-                     #excs=[16,17,18,19.5,21], #['NH','NH2','NCI','NCO'],
-                              ['CIj0/CI','CIj1/CI','CIj2/CI']],
-                              #['COj1/COj0','COj2/COj0','COj3/COj0']],
-                     logx=True, logy=True, borders={'H2': self.parent.parent.H2.grid['NH2tot']-0.3, 'CI': self.parent.parent.H2.grid['NCItot']-0.3,}) #, 'CI': self.parent.parent.H2.grid['NCOtot']-0.3}) #, limit={'H2':24})
+        m.plot_model(parx='x', pars=[['tgas','n', 'pgas']], #pars=[['tgas','Nh2t01','Nh2t02','tgas_m']],
+                     species=[['NH2j0/NH2', 'NH2j1/NH2', 'NH2j2/NH2','NH2j3/NH2'],['NH', 'NH2','NCI','NCO'],['H', 'H2','CI','CO','C+'],
+                              ['COj0','COj1','COj2','COj3'], ['NCj0/NCI','NCj1/NCI','NCj2/NCI']],
+                     logx=True, logy=True, borders=borders) #, 'CI': self.parent.parent.H2.grid['NCOtot']-0.3}) #, limit={'H2':24})
                      #limit={'H2': self.parent.parent.H2.grid['NH2tot'] -0.3}) #, limit={'H2':21} #['OPR','OPR_logNJ1/J02','OPR_logNJ1/J0'],['uv_dens'],['H2_dest_rate'],
 
         # ['cool_cp','cool_o','cool_elrec','cool_tot','heat_phel','heat_phot','heat_tot']],
         #m.calc_Hp()
+        plt.show()
+
+    def plot_fit(self):
+        m = self.parent.parent.H2.listofmodels(self.name)[0]
+        sp = self.parent.parent.grid_pars.species.currentText()
+        if sp == 'CI':
+            m.plot_model(parx='x', species=[['CIj0/CI','CIj1/CI','CIj2/CI'],['NCj0/NCI','NCj1/NCI','NCj2/NCI']], pyfit=True,
+                         logx=True, logy=True, borders={'H2': self.parent.parent.H2.grid['NH2tot']-0.3, 'CI': self.parent.parent.H2.grid['NCItot']-0.3,})
+        elif sp == 'CO':
+            m.plot_model(parx='x', species=[['COj0/CO', 'COj1/CO', 'COj2/CO'], ['NCOj0/NCO', 'NCOj1/NCO', 'NCOj2/NCO']],
+                         pyfit=True,
+                         logx=True, logy=True, borders={'H2': self.parent.parent.H2.grid['NH2tot'] - 0.3,
+                                                        'CO': self.parent.parent.H2.grid['NCOtot'] - 0.3, })
+
         plt.show()
 
     def mouseClickEvent(self, ev):
@@ -277,6 +315,9 @@ class textLabel(pg.TextItem):
 
         if (QApplication.keyboardModifiers() == Qt.ControlModifier):
             self.plot_model()
+
+        if (QApplication.keyboardModifiers() == Qt.AltModifier):
+            self.plot_fit()
 
     def clicked(self, pts):
         print("clicked: %s" % pts)
@@ -349,6 +390,10 @@ class plotGrid(pg.PlotWidget):
                         print(s, cols[s], v1.val, lnL)
                     self.parent.plot_exc.add_temp(cols, add=False)
                     self.parent.plot_exc.add_temp(cols, pars=[self.mousePoint.x(), self.mousePoint.y()])
+                    if spname == 'CO':
+                        self.parent.plot_exc.add_cmb(add=False)
+                        self.parent.plot_exc.add_cmb(cols,cols0)
+
 
     def keyPressEvent(self, event):
         super(plotGrid, self).keyPressEvent(event)
@@ -541,7 +586,7 @@ class gridParsWidget(QWidget):
         self.pars = {'n0': 'x', 'uv': 'y', 'me': 'fixed'}
         #self.pars = {'n0': 'x', 'me': 'y', 'uv': 'fixed'}
         self.parent.H2.setgrid(pars=list(self.pars.keys()), show=False)
-        self.cols, self.x_, self.y_, self.z_ = None, None, None, None
+        self.cols, self.x_, self.y_, self.z_, self.mpars = None, None, None, None, None
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel('grid parameters:'))
@@ -639,12 +684,24 @@ class gridParsWidget(QWidget):
         self.export.clicked[bool].connect(self.exportIt)
         self.export.setFixedSize(90, 30)
         l.addWidget(self.export)
-        l.addStretch(1)
+        self.plotphys = QPushButton('PhysC')
+        self.plotphys.clicked[bool].connect(self.plot_mpars)
+        self.plotphys.setFixedSize(90, 30)
+        l.addWidget(self.plotphys)
+        #l.addStretch(1)
         self.export_table = QPushButton('Table')
         self.export_table.clicked[bool].connect(self.tableIt)
         self.export_table.setFixedSize(90, 30)
         l.addWidget(self.export_table)
         layout.addLayout(l)
+
+        #l = QHBoxLayout(self)
+        #self.plotphys = QPushButton('PhysC')
+        #self.plotphys.clicked[bool].connect(self.plot_mpars)
+        #self.plotphys.setFixedSize(90, 30)
+        #.addWidget(self.plotphys)
+        #l.addStretch(1)
+        #layout.addLayout(l)
 
         l = QHBoxLayout(self)
         self.plot_model_set = QComboBox(self)
@@ -704,7 +761,7 @@ class gridParsWidget(QWidget):
             if 1:
                 self.cols[s] = Rbf(x, y, np.asarray([c[s] for c in grid['cols']]), function='multiquadric', smooth=0.1)
         for p in mp:
-            self.mpars[p] = Rbf(x, y, np.asarray([c[p] for c in grid['mpars']]), function='multiquadric', smooth=0.3)
+            self.mpars[p] = Rbf(x, y, np.asarray([np.log10(c[p]) for c in grid['mpars']]), function='multiquadric', smooth=0.1)
 
             #rbf = Rbf(x,y,z,function='multiquadric',smooth=0.2)
 
@@ -822,79 +879,96 @@ class gridParsWidget(QWidget):
             with open('temp/lnL.pkl', 'wb') as f:
                 pickle.dump([self.x_, self.y_, self.z_], f)
 
-    def plot_mpars(self, fig=None):
-        mparsgrid = {}
-        mp = self.mpars.keys()
-        vmin = 1
-        vmax = 3
-        cmap = 'Greens'
-        levels = [2.0,2.1]
-        pars = []
-        for p in mp:
-            mparsgrid[p] = np.zeros_like(self.z_)
-        #    pars.append(p)
-        #if fig is None:
-        #    fig = plt.figure()
+    def plot_mpars(self):
+        if self.mpars is not None:
+            mp = self.mpars.keys()
+            mparsgrid = {}
+            for p in mp:
+                mparsgrid[p] = np.zeros_like(self.z_)
+            #levels = [2.0,2.1]
 
 
-        if self.x_ is not None:
-            for i, xi in enumerate(self.x_):
-                for k, yi in enumerate(self.y_):
-                    for p in mp:
-                        mparsgrid[p][k,i] = self.mpars[p](xi, yi)
 
-        if 1:
-            p = 'tgas'
-            pmin = np.min(mparsgrid[p])
-            pmax = np.max(mparsgrid[p])
-            #if pmax>1.0e+03:
-            #    pmax = 1.0e+03
-            print('tgas:stat:',pmin, pmax)
-            lp = np.linspace(pmin,pmax,1000)
-            lnL_p = np.zeros_like(lp)
-            lnL = np.exp(self.z_)
-            for i, xi in enumerate(self.x_):
-                for k, yi in enumerate(self.y_):
-                    pval = mparsgrid[p][k,i]
-                    j = np.searchsorted(lp,pval)
-                    lnL_p[j] +=lnL[k][i]
-            lnL_p = lnL_p/np.sum(lnL_p)
-            #print(lp,lnL_p)
-            d = distr1d(lp,lnL_p)
-            d.stats()
-            d.plot()
+            if self.x_ is not None:
+                for i, xi in enumerate(self.x_):
+                    for k, yi in enumerate(self.y_):
+                        for p in mp:
+                            mparsgrid[p][k,i] = self.mpars[p](xi, yi)
+
+            X, Y = np.meshgrid(self.x_, self.y_)
 
 
-        X, Y = np.meshgrid(self.x_, self.y_)
-
-        fig, ax = plt.subplots()
-        for p in mp:
-            z = mparsgrid[p]
-            c = ax.pcolor(X, Y, z, cmap=cmap, vmin=vmin, vmax=vmax)
-            ax.contour(self.x_, self.y_, z, levels=levels, colors='black', alpha=1,
-                             linestyles=['-'], linewidths=1.0)
-
-        if 1:
-            grid = self.parent.H2.grid
-            x, y = np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('x')]]), np.log10(
-                grid[list(self.pars.keys())[list(self.pars.values()).index('y')]])
-            z = np.asarray([c[p] for c in grid['mpars']])
-
-            for v1, v2, l in zip(x, y, z):
-                ax.text(v1, v2, '{:.1f}'.format(l), size=10, color='black')
 
 
-        cax = fig.add_axes([0.93, 0.27, 0.01, 0.47])
-        fig.colorbar(c, cax=cax, orientation='vertical') #, ticks=[1, 1.5, 1.7, 2, 2.3])
+            fig, ax = plt.subplots(1,len(mp))
+            for k,p in enumerate(mp):
+                z = mparsgrid[p]
+                if p == 'tgas':
+                    vmin, vmax = 1,3
+                    cmap = 'Greens'
+                elif p == 'pgas':
+                    vmin, vmax = 2,7
+                    cmap = 'Reds'
+                elif p == 'pgas_h2':
+                    vmin, vmax = 2, 7
+                    cmap = 'Reds'
+                if vmin is None:
+                    ax[k].pcolor(X, Y, z, cmap=cmap)
+                else:
+                    ax[k].pcolor(X, Y, z, cmap=cmap, vmin=vmin, vmax=vmax)
 
-        d = distr2d(x=self.x_, y=self.y_, z=np.exp(self.z_))
-        dx, dy = d.marginalize('y'), d.marginalize('x')
-        dx.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('x')])
-        dy.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('y')])
-        d.plot_contour(ax=ax,color='blue', color_point=None, cmap=None, alpha=0, lw=1.0, zorder=5)
+                #ax.contour(self.x_, self.y_, z, levels=levels, colors='black', alpha=1,
+                #                 linestyles=['-'], linewidths=1.0)
+
+                # plot text grids
+                if 1:
+                    grid = self.parent.H2.grid
+                    x, y = np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('x')]]), np.log10(
+                        grid[list(self.pars.keys())[list(self.pars.values()).index('y')]])
+                    z = np.asarray([np.log10(c[p]) for c in grid['mpars']])
+                    for v1, v2, l in zip(x, y, z):
+                        ax[k].text(v1, v2, '{:.1f}'.format(l), size=10, color='black')
+                    #for i, xi in enumerate(self.x_):
+                    #    for j, yj in enumerate(self.y_):
+                    #        ax[k].text(xi, yj, '{:.1f}'.format(mparsgrid[p][j,i]), size=5, color='red')
+
+            # plot colorbar
+            if 0:
+                cax = fig.add_axes([0.93, 0.27, 0.01, 0.47])
+                fig.colorbar(c, cax=cax, orientation='vertical') #, ticks=[1, 1.5, 1.7, 2, 2.3])
+
+            #plot H2 contour
+            if 0:
+                d = distr2d(x=self.x_, y=self.y_, z=np.exp(self.z_))
+                dx, dy = d.marginalize('y'), d.marginalize('x')
+                dx.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('x')])
+                dy.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('y')])
+                d.plot_contour(ax=ax,color='blue', color_point=None, cmap=None, alpha=0, lw=1.0, zorder=5)
+
+            # calc boot t_gas
+            if 0:
+                p = 'tgas'
+                pmin = np.min(mparsgrid[p])
+                pmax = np.max(mparsgrid[p])
+                #if pmax>1.0e+03:
+                #    pmax = 1.0e+03
+                print('tgas:stat:',pmin, pmax)
+                lp = np.linspace(pmin,pmax,1000)
+                lnL_p = np.zeros_like(lp)
+                lnL = np.exp(self.z_)
+                for i, xi in enumerate(self.x_):
+                    for k, yi in enumerate(self.y_):
+                        pval = mparsgrid[p][k,i]
+                        j = np.searchsorted(lp,pval)
+                        lnL_p[j] +=lnL[k][i]
+                lnL_p = lnL_p/np.sum(lnL_p)
+                #print(lp,lnL_p)
+                d = distr1d(lp,lnL_p)
+                d.stats()
+                d.plot()
 
 
-        plt.show()
+            plt.show()
 
 
     def plotIt(self):
@@ -998,13 +1072,13 @@ class gridParsWidget(QWidget):
                                        lw=2.0)
 
                         # plot excitation for H2
-                        #def getatomic(species, levels=[0, 1, 2]):
-                        #    if species == 'H2':
-                        #        return [H2energy[0, i] for i in levels], [stat_H2[i] for i in levels]
-                        #    elif species == 'CI':
-                        #        return [CIenergy[i] for i in levels], [stat_CI[i] for i in levels]
-                        #    elif species == 'CO':
-                        #        return [COenergy[i] for i in levels], [stat_CO[i] for i in levels]
+                        def getatomic(species, levels=[0, 1, 2]):
+                            if species == 'H2':
+                                return [H2energy[0, i] for i in levels], [stat_H2[i] for i in levels]
+                            elif species == 'CI':
+                                return [CIenergy[i] for i in levels], [stat_CI[i] for i in levels]
+                            elif species == 'CO':
+                                return [COenergy[i] for i in levels], [stat_CO[i] for i in levels]
 
                         species = 'H2'
                         sp = [s for s in q.e.keys() if species + 'j' in s]
@@ -1095,13 +1169,13 @@ class gridParsWidget(QWidget):
                                        lw=2.0)
 
                         # plot excitation for H2
-                        #def getatomic(species, levels=[0, 1, 2]):
-                        #    if species == 'H2':
-                        #        return [H2energy[0, i] for i in levels], [stat_H2[i] for i in levels]
-                        #    elif species == 'CI':
-                        #        return [CIenergy[i] for i in levels], [stat_CI[i] for i in levels]
-                        #    elif species == 'CO':
-                        #        return [COenergy[i] for i in levels], [stat_CO[i] for i in levels]
+                        def getatomic(species, levels=[0, 1, 2]):
+                            if species == 'H2':
+                                return [H2energy[0, i] for i in levels], [stat_H2[i] for i in levels]
+                            elif species == 'CI':
+                                return [CIenergy[i] for i in levels], [stat_CI[i] for i in levels]
+                            elif species == 'CO':
+                                return [COenergy[i] for i in levels], [stat_CO[i] for i in levels]
 
                         species = 'H2'
                         sp = [s for s in q.e.keys() if species + 'j' in s]
@@ -1182,8 +1256,9 @@ class H2viewer(QMainWindow):
         #self.H2 = H2_exc(folder='data_z0.3') #h2_uv177_n_17_7_z0_31_s_25.hdf5', 'h2_uv0_1_n_1_z0_31_s_25.hdf5', 'h2_uv5_62_n_5_62_z0_31_s_23.hdf5
         #self.H2 = H2_exc(folder='data/sample/1_5_4/av2_0_cmb0_0_z0_3_n_uv/', H2database='MW') #z0_1
         #self.H2 = H2_exc(folder='data/sample/1_5_4/av0_5_cmb2_5_z0_1_n_uv', H2database='MW')
-        #self.H2 = H2_exc(folder='data/sample/1_5_4/av2_0_cmb0_0_z1_0_n_uv', H2database='MW')
-        self.H2 = H2_exc(folder='data/sample/1_5_4/co_grid', H2database='MW')
+        #self.H2 = H2_exc(folder='data/sample/1_5_4/co_grid_n_uv_av10_cmb0_0_me1e0_cr15', H2database='MW')
+        self.H2 = H2_exc(folder='data/sample/1_5_4/co_grid_n_uv_av10_cmb0_0_me1e0', H2database='MW')
+        #self.H2 = H2_exc(folder='data/sample/1_5_4/test', H2database='MW')
         self.H2.readfolder()
         self.initStyles()
         self.initUI()
