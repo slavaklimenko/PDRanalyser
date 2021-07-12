@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (QApplication, QMessageBox, QMainWindow, QSplitter, 
 import pyqtgraph as pg
 from scipy.interpolate import interp2d, RectBivariateSpline, Rbf
 import sys
-sys.path.append('C:/science/python')
+sys.path.append('/home/slava/science/codes/python')
 from H2_exc import *
 from spectro.stats import distr2d,distr1d
 from spectro.a_unc import a
@@ -283,9 +283,12 @@ class textLabel(pg.TextItem):
         #m.plot_model(parx='h2', pars=[['tgas','n','pgas'],['heat_phel','heat_h2','heat_tot'],['cool_h2','cool_o','cool_elrec','cool_tot','cool_cp']],
         #             species=[['H2j0/H2', 'H2j1/H2', 'H2j2/H2','H2j3/H2', 'H2j4/H2'],['H','H2','H+','el','C']],
         #             logx=True, logy=True, limit={'H2': self.parent.parent.H2.grid['NH2tot'] -0.3 }) #, limit={'H2':21} #['OPR','OPR_logNJ1/J02','OPR_logNJ1/J0'],['uv_dens'],['H2_dest_rate'],
-        m.plot_model(parx='x', pars=[['tgas','n', 'pgas']], #pars=[['tgas','Nh2t01','Nh2t02','tgas_m']],
-                     species=[['NH2j0/NH2', 'NH2j1/NH2', 'NH2j2/NH2','NH2j3/NH2'],['NH', 'NH2','NCI','NCO'],['H', 'H2','CI','CO','C+'],
-                              ['COj0','COj1','COj2','COj3'], ['NCj0/NCI','NCj1/NCI','NCj2/NCI']],
+        m.plot_model(parx='h2', #pars=[['tgas','n', 'pgas','T01']], #
+                     pars=[['tgas','Nh2t01','Nh2t02','tgas_m']],
+                     species=[['NH2j0/NH2', 'NH2j1/NH2', 'NH2j2/NH2', 'NH2j3/NH2'], ['NH', 'NH2', 'NCI'],
+                              ['H/H2', 'H+/H2']],
+                     #species=[['NH2j0/NH2', 'NH2j1/NH2', 'NH2j2/NH2','NH2j3/NH2'],['NH', 'NH2','NCI','NCO'],['H', 'H2','CI','CO','C+','H+'],
+                     #         ['COj0','COj1','COj2','COj3'], ['NCj0/NCI','NCj1/NCI','NCj2/NCI']],
                      logx=True, logy=True, borders=borders) #, 'CI': self.parent.parent.H2.grid['NCOtot']-0.3}) #, limit={'H2':24})
                      #limit={'H2': self.parent.parent.H2.grid['NH2tot'] -0.3}) #, limit={'H2':21} #['OPR','OPR_logNJ1/J02','OPR_logNJ1/J0'],['uv_dens'],['H2_dest_rate'],
 
@@ -1257,7 +1260,7 @@ class H2viewer(QMainWindow):
         #self.H2 = H2_exc(folder='data/sample/1_5_4/av2_0_cmb0_0_z0_3_n_uv/', H2database='MW') #z0_1
         #self.H2 = H2_exc(folder='data/sample/1_5_4/av0_5_cmb2_5_z0_1_n_uv', H2database='MW')
         #self.H2 = H2_exc(folder='data/sample/1_5_4/co_grid_n_uv_av10_cmb0_0_me1e0_cr15', H2database='MW')
-        self.H2 = H2_exc(folder='data/sample/1_5_4/co_grid_n_uv_av10_cmb0_0_me1e0', H2database='MW')
+        self.H2 = H2_exc(folder='data/sample/co_grid_n_uv_av10_cmb0_0_me1e0', H2database='MW')
         #self.H2 = H2_exc(folder='data/sample/1_5_4/test', H2database='MW')
         self.H2.readfolder()
         self.initStyles()

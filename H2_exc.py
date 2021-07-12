@@ -1,5 +1,6 @@
 from collections import OrderedDict
 import h5py
+import numpy
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -15,7 +16,7 @@ from scipy import integrate
 from scipy.optimize import root
 from scipy.interpolate import interp1d
 import sys
-sys.path.append('/home/toksovogo/science/codes/python')
+sys.path.append('/home/slava/science/codes/python')
 sys.path.append('/science/python')
 from spectro.a_unc import a
 from spectro.sviewer.utils import Timer
@@ -49,12 +50,14 @@ def column(matrix, i):
         return np.asarray([row.plus for row in matrix])
     if i == 2 or (isinstance(i, str) and i[0] == 'm'):
         return np.asarray([row.minus for row in matrix])
-
-H2_energy = np.genfromtxt(os.path.dirname(os.path.realpath(__file__)) + r'/energy_X_H2.dat', dtype=[('nu', 'i2'), ('j', 'i2'), ('e', 'f8')],
+# -l 6022: 172 : 22 tunnel
+#-p 6022 localhost
+H2_energy = numpy.genfromtxt(os.path.dirname(os.path.realpath(__file__)) + r'/energy_X_H2.dat', dtype=[('nu', 'i2'), ('j', 'i2'), ('e', 'f8')],
                           unpack=True, skip_header=3, comments='#')
-H2energy = np.zeros([max(H2_energy['nu']) + 1, max(H2_energy['j']) + 1])
-for e in H2_energy:
-    H2energy[e[0], e[1]] = e[2]
+H2energy = np.zeros([max(H2_energy[0]) + 1, max(H2_energy[1]) + 1])
+#H2energy = np.zeros([max(H2_energy['nu']) + 1, max(H2_energy['j']) + 1])
+for k,e in enumerate(H2_energy[0]):
+    H2energy[e, H2_energy[1][k]] = H2_energy[2][k]
 CIenergy = [0, 16.42, 43.41]
 COenergy = [0.0, 3.84, 11.53, 23.06, 38.44, 57.67, 80.73, 107.64, 138.39, 172.97] # in cm-1
 #COenergy = [2.766 * ((i+1) * (i) )/1.428 for i in range(10)] # in cm-1
@@ -199,6 +202,7 @@ class model():
         self.n0 = self.par('proton_density_input')
         self.uv = self.par('radm_ini')
         self.zeta = self.par('zeta')
+        self.tcmb = self.par('t_cmb')
 
         # >>> profile of physical quantities
         self.x = self.par('distance')
@@ -219,7 +223,6 @@ class model():
         self.h2t01_cd = self.par('h2t01_cd')
         self.OPR = self.par('OPR')
         self.OPR_cd = self.par('OPR_cd')
-        self.tcmb = self.par('tcmb')
         self.h2fr = self.par('h2fr')
        # self.t01 = self.par('t01')
 
@@ -418,7 +421,8 @@ class model():
         return fig
         #fig.tight_layout()
 
-    def plot_phys_cond(self, pars=['tgas', 'n', 'av','h2t01','uv_dens'], logx=True, logy = True, ax=None, legend=True, parx='x', limit=None,yscale='dec', ls='-',borders=None,fontsize=12):
+    def plot_phys_cond(self, pars=['tgas', 'n', 'av','h2t01','uv_dens'], logx=True, logy = True, ax=None, legend=True,
+                       parx='x', limit=None,yscale='dec', ls='-',borders=None, fontsize=12, ylabel='$\\log$\\,Physical cond.',xlabel=True):
         """
         Plot the physical parameters in the model
 
@@ -434,21 +438,21 @@ class model():
         :return: ax
             -  ax            :  axes object
         """
-
-        if parx == 'av':
-            xlabel = 'Av'
-        elif parx == 'x':
-            xlabel = '$\log$(Distance), cm'
-        elif parx == 'h2':
-            xlabel = 'log(NH2), cm-2'
-        elif parx == 'hi':
-            xlabel = 'log(NHI), cm-2'
-        elif parx == 'ci':
-            xlabel = 'log(NCI), cm-2'
-        elif parx == 'co':
-            xlabel = 'log(NCO), cm-2'
-        elif parx == 'pgas':
-            xlabel = 'pgas'
+        if xlabel:
+            if parx == 'av':
+                xlabel = 'Av'
+            elif parx == 'x':
+                xlabel = '$\log$(Distance), cm'
+            elif parx == 'h2':
+                xlabel = 'log(NH2), cm-2'
+            elif parx == 'hi':
+                xlabel = 'log(NHI), cm-2'
+            elif parx == 'ci':
+                xlabel = 'log(NCI), cm-2'
+            elif parx == 'co':
+                xlabel = 'log(NCO), cm-2'
+            elif parx == 'pgas':
+                xlabel = 'pgas'
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(12, 6))
@@ -474,8 +478,6 @@ class model():
         else:
             x = getattr(self, parx)[mask]
 
-        ax.set_xlim([x[0], x[-1]])
-        ax.set_xlabel(xlabel,fontsize=fontsize)
 
         lines = []
         thb_names = ['cool_tot', 'cool_o','cool_cp', 'cool_c', 'cool_elrec', 'cool_free', 'cool_h', 'cool_h2',
@@ -488,7 +490,7 @@ class model():
                 axi = ax.twinx()
             ylabel=''
             if p == 'tgas':
-                ylabel = 'Temperature, K'
+                ylabel = '$\\log T_{\\rm kin}$, K'
             #    yscale = 'dec'
             #    bot,top = 10,1e3
             elif p == 'n':
@@ -602,22 +604,28 @@ class model():
                 axi.set_ylim(ax.get_ylim())
 
 
-            for t in axi.get_yticklabels():
-                t.set_color(color)
+            #for t in axi.get_yticklabels():
+            #    t.set_color(color)
 
-            #if bot is not None:
-            #    axi.set_ylim(bot, top)
-            #    ax.set_ylim(bot, top)
+
 
             if yscale == 'log':
                 ax.set_yscale('log')
                 axi.set_yscale('log')
+        if ylabel is not None:
+            axi.set_ylabel(ylabel, fontsize=fontsize)
+
+        ax.set_xlim([x[0], x[-1]])
+        if xlabel:
+            ax.set_xlabel(xlabel, fontsize=fontsize)
 
         if legend:
             ax.legend(handles=lines, loc='best',fontsize=fontsize)
 
         if borders is not None:
             bot, top = ax.get_ylim()
+            bot -= 1
+            top += 1
             for k in borders.keys():
                 if k == 'H2': color = 'orange'
                 if k == 'CO': color = 'red'
@@ -634,7 +642,8 @@ class model():
 
         return ax
 
-    def plot_profiles(self, species=None, logx=False, logy=False, label=None, ylabel=True, ax=None, legend=True, ls='-', lw=1, parx='av', limit=None,normed=False, borders=None,fontsize=12):
+    def plot_profiles(self, species=None, logx=False, logy=False, label=None, ylabel=True, ax=None, legend=True, ls='-', lw=1, parx='av', limit=None,
+                      normed=False, borders=None,fontsize=12, tuneaxes=True, colors = None):
         """
         Plot the profiles of the species
 
@@ -666,6 +675,8 @@ class model():
             xlabel = 'log(NHI), cm-2'
         elif parx == 'ci':
             xlabel = 'log(NCI), cm-2'
+        elif parx == 'co':
+            xlabel = 'log(NCO), cm-2'
         elif parx == 'pgas':
             xlabel = 'pgas'
         elif parx == 'tgas':
@@ -697,16 +708,11 @@ class model():
         else:
             x = getattr(self, parx)[mask]
 
-        ax.set_xlim([x[0], x[-1]])
-        ax.set_xlabel(xlabel,fontsize=fontsize)
 
-
-        if ax is None:
-            fig, ax = plt.subplots()
 
         lab = label
         print(x)
-        for s in species:
+        for k_sp,s in enumerate(species):
             if '/' in s:
                 s1, s2 = s.split('/')[:]
                 y = self.sp[s1][mask] / self.sp[s2][mask]
@@ -719,7 +725,7 @@ class model():
             elif s == 'Texc':
                 y = (self.sp['NH2j1'][mask])/\
                 (self.sp['NH2j0'][mask])
-                logy = True # + self.sp['H2j2'][mask] + self.sp['H2j3'][mask]
+                logy = True
                 ax.set_ylim(1,3)
                 z = []
                 for e in y:
@@ -729,28 +735,34 @@ class model():
                 y = -170.5/np.log(z)
             else:
                 y = self.sp[s][mask]
-            #print(s, y)
             if label is None:
                 lab = s
                 if s == 'H2':
                     lab = 'H$_2$'
-                print('label',lab)
             if normed:
                 y = y/self.n0
             if logy:
-                ax.plot(x, np.log10(y), ls=ls, label=lab, lw=lw, linewidth=2.0)
+                y =  np.log10(y)
+            if colors is None:
+                ax.plot(x, y, ls=ls, label=lab, lw=lw)
             else:
-                ax.plot(x, y, ls=ls, label=lab, lw=lw, linewidth=2.0)
-            #if s in ['H2j1/H2']:
-            #    ax.axvline(self.calc_T01_limit(limith2={'H2': 21.5}, case=1), ls='--', color='green')
+                ax.plot(x, y, ls=ls, label=lab, lw=lw,color=colors[k_sp])
 
+
+
+        if 1:
+            ax.set_xlim([x[0], x[-1]])
+            ax.set_xlabel(xlabel, fontsize=fontsize)
         if ylabel:
-            ax.set_ylabel(label, fontsize=fontsize)
+            ax.set_ylabel(ylabel, fontsize=fontsize)
 
         if legend:
             ax.legend(fontsize=fontsize)
 
         if borders is not None:
+            bot, top = ax.get_ylim()
+            bot -=1
+            top +=1
             for k in borders.keys():
                 if k == 'H2': color = 'orange'
                 if k == 'CO': color = 'red'
@@ -760,15 +772,18 @@ class model():
                     v1 = np.log10(getattr(self, parx)[self.mask][-1])
                     self.set_mask(logN={k: borders[k]-1}, sides=2)
                     v2 = np.log10(getattr(self, parx)[self.mask][-1])
-                    bot, top = ax.get_ylim()
+                    print('arrange',bot, top,k)
                     y1 = np.arange(bot,top,0.5)
                     ax.fill_betweenx(y1,v1,v2, color=color, alpha=0.2)
                 #ax.axvline(x=v, ls='--', color=color, alpha=0.7)
 
-
+        if tuneaxes:
+            ax.tick_params(which='both', width=1, direction='in', labelsize=fontsize, right='True', top='True')
+            ax.tick_params(which='major', length=5)
+            ax.tick_params(which='minor', length=3)
         return ax
 
-    def plot_popratio(self,  ax=None,parx='av',logx=False, logy=False, ls = '--', color='black',sp='CI'):
+    def plot_popratio(self,  ax=None,parx='av',logx=False, logy=False, ls = '--', colors=None,sp='CI'):
 
         #if species is None:
         #    species = self.species
@@ -783,9 +798,11 @@ class model():
             xlabel = 'log(NHI), cm-2'
         elif parx == 'ci':
             xlabel = 'log(NCI), cm-2'
+        elif parx == 'co':
+            xlabel = 'log(NCI), cm-2'
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(12, 6))
+            fig, ax = plt.subplots(figsize=(4.5, 6))
 
         if logx:
             mask = getattr(self, parx) > 0
@@ -801,8 +818,14 @@ class model():
         ntot = self.n[mask]
         fr = self.h2fr[mask]
         uv = self.uv*(self.uv_flux/self.uv_flux[0])[mask]
-        logN = self.sp['N'+sp][mask]
-        print('uv array',uv)
+        #tau0 = 0.5*46*(self.x[mask]/1e19)*(self.n[mask]/1e3)
+        tau0 = {}
+        jsp = ['1', '2','3','4']
+        zabs = self.tcmb/2.725 - 1
+        print('tcmb',self.tcmb/2.725 - 1)
+
+        for k,j in enumerate(jsp):
+            tau0[j] = 10*self.sp['NCO'][mask]/7e+017*46*(self.sp['COj'+str(k)][mask]/self.sp['COj'+str(1)][mask])
 
 
         if sp == 'CI':
@@ -861,57 +884,80 @@ class model():
                 ax.set_ylim(-2.5, 0.1)
 
         if sp == 'CO':
-            pr = pyratio(z=0)
-            numlevels = 3
+            pr = pyratio(z=zabs)
+            numlevels = 20
             pr.add_spec('CO', num=numlevels)
-            pr.set_pars(['rad', 'n', 'T', 'f'])
+            #pr.set_pars(['rad', 'n', 'T', 'f'])
+            pr.set_pars(['rad', 'n', 'T', 'f', 'b_trap'])
             spec = {}
             for k in range(numlevels):
-                spec['CO' + str(k)] = []
+                spec['COj' + str(k)] = []
             x0 = []
-            for i in range(0, len(tkin), 20):
-                pr.pars['n'].value = np.log10(ntot[i])
-                pr.pars['T'].value = np.log10(tkin[i])
-                pr.pars['f'].value = np.log10(fr[i])
-                pr.pars['rad'].value = np.log10(uv[i])
-                results = pr.predict(level=-1)
-                #print(i, [pr.pars[el].value for el in ['rad', 'n', 'T', 'f']])
-                #print(i, results)
-                x0.append(x[i])
-                for k in range(numlevels):
-                    spec['CO' + str(k)].append(results[k])
-
-                colors = ['blue', 'orange', 'green']
-                for k in range(numlevels):
-                    ax.plot(np.array(x0), np.array(spec['CO' + str(k)]), ls=ls, color=colors[k])
-                ax.set_xlim(10, 18)
-                ax.set_ylim(-2.5, 0.1)
-
-            if 1:
-                # uv = self.uv * (1 + 0*self.uv_flux / self.uv_flux[0])[mask]
-                pr = pyratio(z=0)
-                numlevels = 3
-                pr.add_spec('CO', num=numlevels)
-                pr.set_pars(['rad', 'n', 'T', 'f', 'b_trap'])
-                spec = {}
-                for k in range(numlevels):
-                    spec['CO' + str(k)] = []
-                x0 = []
-                for i in range(0, len(tkin), 20):
+            results = {}
+            for i in range(0, len(tkin), 10):
+                for j in jsp:
                     pr.pars['n'].value = np.log10(ntot[i])
                     pr.pars['T'].value = np.log10(tkin[i])
                     pr.pars['f'].value = np.log10(fr[i])
                     pr.pars['rad'].value = np.log10(uv[i])
-                    pr.pars['b_trap'].value = -5.0*logN[i]/logN[-1]
-                    results = pr.predict(level=-1)
-                    # print(i, [pr.pars[el].value for el in ['rad', 'n', 'T', 'f']])
-                    # print(i, results)
+                    pr.pars['b_trap'].value = 1/(1+0.5*tau0[j][i])
+                    results[j] = pr.predict(level=0)
+                    spec['COj' + j].append(results[j][int(j)])
+                    if 0:
+                        pr.balance(debug='C')
+
+
+                x0.append(x[i])
+                #for k in range(numlevels):
+                #    spec['COj' + str(k)].append(results[k])
+
+
+            for k in range(1,len(jsp)+1):
+                if colors is None:
+                    ax.plot(np.array(x0), np.array(spec['COj' + str(k)]), ls='--', lw=1)
+                else:
+                    print(k)
+                    ax.plot(np.array(x0), np.array(spec['COj' + str(k)]), ls='--', lw=1,color=colors[k-1])
+
+            if 0:
+                def getatomic(species, levels=[0, 1, 2]):
+                    if species == 'H2':
+                        return [H2energy[0, i] for i in levels], [stat_H2[i] for i in levels]
+                    elif species == 'CI':
+                        return [CIenergy[i] for i in levels], [stat_CI[i] for i in levels]
+                    elif species == 'CO':
+                        return [COenergy[i] for i in levels], [stat_CO[i] for i in levels]
+
+                x, stat = getatomic(species=sp, levels=[1,2,3,4,5,6])
+                for k in range(0,len(jsp)):
+                    ax.axhline(y=np.log10(stat[k]* np.exp(-x[k] / 2.725 / (1 + z))), ls='--')
+
+            if 1:
+                pr = pyratio(z=zabs)
+                numlevels = 20
+                pr.add_spec('CO', num=numlevels)
+                pr.set_pars(['rad', 'n', 'T', 'f'])
+                spec = {}
+                for k in range(numlevels):
+                    spec['COj' + str(k)] = []
+                x0 = []
+                for i in range(0, len(tkin), 10):
+                    pr.pars['n'].value = np.log10(ntot[i])
+                    pr.pars['T'].value = np.log10(tkin[i])
+                    pr.pars['f'].value = np.log10(fr[i])
+                    pr.pars['rad'].value = np.log10(uv[i])
+                    results = pr.predict(level=0)
                     x0.append(x[i])
                     for k in range(numlevels):
-                        spec['CO' + str(k)].append(results[k])
-                colors = ['blue', 'orange', 'green']
-                for k in range(numlevels):
-                    ax.plot(np.array(x0), np.array(spec['CO' + str(k)]), ls='-.', color=colors[k])
+                        spec['COj' + str(k)].append(results[k])
+
+
+                for k in range(1, len(jsp) + 1):
+                    if colors is None:
+                        ax.plot(np.array(x0), np.array(spec['COj' + str(k)]), ls='dotted', lw=1)
+                    else:
+                        print(k)
+                        ax.plot(np.array(x0), np.array(spec['COj' + str(k)]), ls='dotted', lw=1, color=colors[k - 1])
 
     def plot_exciation(self, ax=None, H2levels=['H2j0','H2j1','H2j2','H2j3','H2j4'], logN=[17,18],legend=True):
 
@@ -1217,7 +1263,7 @@ class H2_exc():
 
     def readH2database(self, data='all'):
         import sys
-        sys.path.append('/home/toksovogo/science/codes/python/3.5/H2_excitation')
+        sys.path.append('/home/slava/science/codes/python/H2_excitation')
         import H2_summary
 
         self.H2 = H2_summary.load_empty()
@@ -1485,7 +1531,7 @@ class H2_exc():
                 ax = self.plot_objects(objects=object)
                 self.plot_models(ax=ax, models=self.mask[imax])
 
-    def plot_objects(self, objects=[], species=[], ax=None, plotstyle='scatter', legend=False,syst=None,label=None,msize=3,color='black'):
+    def plot_objects(self, objects=[], species='H2', ax=None, plotstyle='scatter', legend=False,syst=None,label=None,msize=3,color='black', tuneaxes=True,fontsize=12):
         """
         Plot object from the data
 
@@ -1506,7 +1552,7 @@ class H2_exc():
             objects = [objects]
         for o in objects:
             q = self.comp(o)
-            if species is None or len(species) == 0:
+            if species is None or len(species) == 0 or species == 'H2':
                 sp = [s for s in q.e.keys() if 'H2j' in s]
                 j = np.sort([int(s[3:]) for s in sp if 'v' not in s])
                 x = [H2energy[0, i] for i in j]
@@ -1562,7 +1608,12 @@ class H2_exc():
             labels = np.unique(labs)
             handles = [handles[np.where(np.asarray(labs) == l)[0][0]] for l in labels]
             ax.legend(handles, labels, loc='best')
-
+        if tuneaxes:
+            ax.tick_params(which='both', width=1, direction='in', labelsize=fontsize, right='True', top='True')
+            ax.tick_params(which='major', length=5)
+            ax.tick_params(which='minor', length=2)
+            ax.set_ylabel('$\log~N_{\\rm{J}}($'+species+'$)/g_{\\rm{J}}$', fontsize=fontsize)
+            ax.set_xlabel('Energy of {:s} levels,'.format(species) + ' cm$^{-1}$', fontsize=fontsize)
         return ax
 
     def plot_models(self, ax=None, models='current', speciesname=['H'], logN=None, species='<7', legend=True, logy=True,color='royalblue',labelsize = 12,msize=5,label=None):
