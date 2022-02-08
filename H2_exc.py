@@ -1,6 +1,5 @@
 from collections import OrderedDict
 import h5py
-import numpy
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -9,21 +8,24 @@ from matplotlib.ticker import AutoMinorLocator, MultipleLocator, FormatStrFormat
 from matplotlib import rcParams
 rcParams['font.family'] = 'serif'
 rcParams['font.serif'] = ['Times New Roman']
-
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 from scipy import integrate
 from scipy.optimize import root
 from scipy.interpolate import interp1d
 import sys
-sys.path.append('/home/slava/science/codes/python')
+sys.path.append('/home/toksovogo/science/codes/python')
 sys.path.append('/science/python')
+sys.path.append('home/slava/science/codes/python/')
 from spectro.a_unc import a
 from spectro.sviewer.utils import Timer
 from spectro.pyratio import *
 import warnings
 from scipy.interpolate import interp2d, RectBivariateSpline, Rbf
 import pickle
+
+#pathH2exc = '/home/slava/science/codes/python/H2_excitation'
+pathH2exc = '/home/toksovogo/science/codes/python/3.5/H2_excitation'
 
 
 
@@ -50,14 +52,17 @@ def column(matrix, i):
         return np.asarray([row.plus for row in matrix])
     if i == 2 or (isinstance(i, str) and i[0] == 'm'):
         return np.asarray([row.minus for row in matrix])
-# -l 6022: 172 : 22 tunnel
-#-p 6022 localhost
-H2_energy = numpy.genfromtxt(os.path.dirname(os.path.realpath(__file__)) + r'/energy_X_H2.dat', dtype=[('nu', 'i2'), ('j', 'i2'), ('e', 'f8')],
+
+H2_energy = np.genfromtxt(os.path.dirname(os.path.realpath(__file__)) + r'/energy_X_H2.dat', dtype=[('nu', 'i2'), ('j', 'i2'), ('e', 'f8')],
                           unpack=True, skip_header=3, comments='#')
-H2energy = np.zeros([max(H2_energy[0]) + 1, max(H2_energy[1]) + 1])
-#H2energy = np.zeros([max(H2_energy['nu']) + 1, max(H2_energy['j']) + 1])
-for k,e in enumerate(H2_energy[0]):
-    H2energy[e, H2_energy[1][k]] = H2_energy[2][k]
+H2energy = np.zeros([max(H2_energy['nu']) + 1, max(H2_energy['j']) + 1])
+for e in H2_energy:
+    H2energy[e[0], e[1]] = e[2]
+#H2_energy = np.genfromtxt(os.path.dirname(os.path.realpath(__file__)) + r'/energy_X_H2.dat', dtype=[('nu', 'i2'), ('j', 'i2'), ('e', 'f8')],
+#                          unpack=True, skip_header=3, comments='#')
+#H2energy = np.zeros([max(H2_energy[0]) + 1, max(H2_energy[1]) + 1])
+#for k,e in enumerate(H2_energy[0]):
+#    H2energy[e, H2_energy[1][k]] = H2_energy[2][k]
 CIenergy = [0, 16.42, 43.41]
 COenergy = [0.0, 3.84, 11.53, 23.06, 38.44, 57.67, 80.73, 107.64, 138.39, 172.97] # in cm-1
 #COenergy = [2.766 * ((i+1) * (i) )/1.428 for i in range(10)] # in cm-1
@@ -77,14 +82,15 @@ spcode = {'H': 'n_h', 'H2': 'n_h2', 'H+': 'n_hp', 'He': 'n_he',
           'el': 'n_electr', 'O': 'n_o', 'O+': 'n_op',
           'CIj0': 'pop_c_el3p_j0', 'CIj1': 'pop_c_el3p_j1', 'CIj2': 'pop_c_el3p_j2',
           'He': 'n_he','He+': 'n_hep',
-          'NH': 'cd_prof_h','NH2': 'cd_prof_h2',  'NH2j0': 'cd_lev_prof_h2_v0_j0', 'NH2j1': 'cd_lev_prof_h2_v0_j1','NH2j2': 'cd_lev_prof_h2_v0_j2','NH2j3': 'cd_lev_prof_h2_v0_j3','NH2j4': 'cd_lev_prof_h2_v0_j4','NH2j5': 'cd_lev_prof_h2_v0_j5',
+          'NH': 'cd_prof_h','NH2': 'cd_prof_h2',  'NH+': 'cd_prof_hp',
+          'NH2j0': 'cd_lev_prof_h2_v0_j0', 'NH2j1': 'cd_lev_prof_h2_v0_j1','NH2j2': 'cd_lev_prof_h2_v0_j2','NH2j3': 'cd_lev_prof_h2_v0_j3','NH2j4': 'cd_lev_prof_h2_v0_j4','NH2j5': 'cd_lev_prof_h2_v0_j5',
           'NH2j6': 'cd_lev_prof_h2_v0_j6', 'NH2j7': 'cd_lev_prof_h2_v0_j7','NH2j8': 'cd_lev_prof_h2_v0_j8','NH2j9': 'cd_lev_prof_h2_v0_j9','NH2j10': 'cd_lev_prof_h2_v0_j10','NH2j11': 'cd_lev_prof_h2_v0_j11',
           'NHD': 'cd_prof_hd', 'NCI': 'cd_prof_c',  'NCj0': 'cd_lev_prof_c_el3p_j0', 'NCj1': 'cd_lev_prof_c_el3p_j1','NCj2': 'cd_lev_prof_c_el3p_j2',
           'NCO': 'cd_prof_co', 'NCOj0': 'cd_lev_prof_co_v0_j0','NCOj1': 'cd_lev_prof_co_v0_j1','NCOj2': 'cd_lev_prof_co_v0_j2',
           'NCOj3': 'cd_lev_prof_co_v0_j3','NCOj4': 'cd_lev_prof_co_v0_j4','NCOj5': 'cd_lev_prof_co_v0_j5',
           'NC+': 'cd_prof_cp',
           'H2_dest_rate': 'h2_dest_rate_ph', 'H2_form_rate_er': 'h2_form_rate_er','H2_form_rate_lh': 'h2_form_rate_lh','H2_photo_dest_prob': 'photo_prob___h2_photon_gives_h_h',
-          'cool_tot': 'coolrate_tot', 'cool_o': 'coolrate_o','cool_cp': 'coolrate_cp', 'cool_c': 'coolrate_c', 'cool_elrec': 'coolrate_elrecomb', 'cool_free': 'coolrate_freefree', 'cool_h': 'coolrate_h',
+          'cool_tot': 'coolrate_tot', 'cool_o': 'coolrate_o','cool_cp': 'coolrate_cp', 'cool_c': 'coolrate_c','cool_co': 'coolrate_co', 'cool_elrec': 'coolrate_elrecomb', 'cool_free': 'coolrate_freefree', 'cool_h': 'coolrate_h',
           'cool_h2': 'coolrate_h2',
           'heat_tot': 'heatrate_tot', 'heat_phel': 'heatrate_pe','heat_secp': 'heatrate_secp', 'heat_phot': 'heatrate_ph','heat_chem': 'heatrate_chem', 'heat_h2': 'heatrate_h2', 'heat_cr': 'heatrate_cr',
           'H2_diss': 'h2_dest_rate_ph', 'OPR': 't01_ab', 'metal': 'metal', 'radm_ini': 'radm_ini'
@@ -145,7 +151,7 @@ class plot(pg.PlotWidget):
 
 
 class model():
-    def __init__(self, folder='', name=None, filename=None, species=[], show_summary=True, show_meta=False, fastread=True):
+    def __init__(self, folder='', name=None, filename=None, species=[], show_summary=True, show_meta=True, fastread=True):
         self.folder = folder
         self.sp = {}
         self.species = species
@@ -160,25 +166,36 @@ class model():
 
     def initpardict(self):
         self.pardict = {}
-        #self.pardict['metal'] = ('Parameters/Parameters', 13, float)
-        #self.pardict['radm_ini'] = ('Parameters/Parameters', 5, float)
+        self.pardict['codeversion'] = ('Parameters/Informations/', 0, str)
+        self.pardict['metal'] = ('Parameters/Parameters', 13, float)
+        self.pardict['radm_ini'] = ('Parameters/Parameters', 5, float)
         self.pardict['proton_density_input'] = ('Parameters/Parameters', 3, float)
+        self.pardict['avmax'] = ('Parameters/Parameters', 1, float)
         self.pardict['distance'] = ('Local quantities/Positions', 2, float)
         self.pardict['av'] = ('Local quantities/Positions', 1, float)
         self.pardict['tgas'] = ('Local quantities/Gas state', 2, float)
-        self.pardict['tcmb'] = ('Parameters/Informations/', 18, float)
         self.pardict['pgas'] = ('Local quantities/Gas state', 3, float)
         self.pardict['ntot'] = ('Local quantities/Gas state', 1, float)
+        self.pardict['tcmb'] = ('Parameters/Informations/', 18, float)
         self.pardict['h2t01'] =('Local quantities/Auxiliary/Excitation/H2 T01 abundances/', 0, float)
-        #self.pardict['h2t01_cd'] = ('Integrated quantities/Excitation/T01 column densities/', 0, float)
         self.pardict['OPR'] = ('Local quantities/Auxiliary/Excitation/H2 ortho-para ratio/',0, float)
         self.pardict['h2fr'] = ('Local quantities/Auxiliary/Molecular fraction/', 0, float)
-        #self.pardict['OPR_cd'] = ('Integrated quantities/Excitation/H2 ortho-para all levels/', 0, float)
 
-       # for n, ind in zip(['n_h', 'n_h2', 'n_c', 'n_cp', 'n_co'], [0, 2, 5, 93, 44]):
-       #     self.pardict[n] = ('Local quantities/Densities/Densities', ind, float)
+        for n, ind in zip(['n_h', 'n_hp', 'n_h2', 'n_c', 'n_cp', 'n_co'], [0, 92, 2, 5, 100, 46]):
+            self.pardict[n] = ('Local quantities/Densities/Densities', ind, float)
+
         for i in range(11):
             self.pardict['pop_h2_v0_j'+str(i)] = ('Local quantities/Auxiliary/Excitation/Level densities', 9+i, float)
+        for i in range(3):
+            self.pardict[f'pop_c_el3p_j' + str(i)] = (
+            'Local quantities/Auxiliary/Excitation/Level densities', 427 + i, float)
+        for i in range(8):
+            self.pardict[f'pop_co_v0_j' + str(i)] = (
+            'Local quantities/Auxiliary/Excitation/Level densities', 268 + i, float)
+        for el, ind in zip(['h', 'h2', 'hd', 'c', 'co', 'oh'], [0, 2, 3, 5, 46, 36]):
+            self.pardict[f'cd_prof_{el}'] = ('Local quantities/Densities/Column densities', ind, float)
+        for el, ind in zip(['h', 'h2', 'hd', 'c', 'co', 'oh'], [0, 2, 3, 5,46, 36]):
+            self.pardict[f'cd_{el}'] = ('Integrated quantities/Column densities', ind, float)
 
     def read(self, show_meta=True, show_summary=True, fast=None):
         """
@@ -192,52 +209,54 @@ class model():
         """
         self.file = h5py.File(self.folder + self.filename, 'r')
 
+        if show_meta:
+            self.showMetadata()
         if fast is not None:
             self.fastread = fast
 
+        if 1:
+            # >>> model input parameters
+            self.Z = self.par('metal')
+            self.P = self.par('gas_pressure_input')
+            self.n0 = self.par('proton_density_input')
+            self.avmax = self.par('avmax')
+            self.uv = self.par('radm_ini')
+            self.cr = self.par('zeta')
+            self.tcmb = self.par('t_cmb')
+            print('zeta',self.cr,self.tcmb)
 
-        # >>> model input parameters
-        self.me = self.par('metal')
-        self.P = self.par('gas_pressure_input')
-        self.n0 = self.par('proton_density_input')
-        self.uv = self.par('radm_ini')
-        self.zeta = self.par('zeta')
-        self.tcmb = self.par('t_cmb')
 
-        # >>> profile of physical quantities
-        self.x = self.par('distance')
 
-        self.h2 = self.par('cd_prof_h2')
-        self.hi = self.par('cd_prof_h')
-        self.ci = self.par('cd_prof_c')
-        self.co = self.par('cd_prof_co')
-        self.hd = self.par('cd_prof_hd')
-        self.av = self.par('av')
-        self.tgas = self.par('tgas')
-        self.pgas = self.par('pgas')
-        self.n = self.par('ntot')
-        self.nH = self.par('protdens')
-        self.uv_flux = self.par('uv_flux')
-        self.uv_dens = self.par('uv_dens')
-        self.h2t01= self.par('h2t01')
-        self.h2t01_cd = self.par('h2t01_cd')
-        self.OPR = self.par('OPR')
-        self.OPR_cd = self.par('OPR_cd')
-        self.h2fr = self.par('h2fr')
-       # self.t01 = self.par('t01')
+            # >>> profile of physical quantities
+            self.x = self.par('distance')
+            for el in ['h', 'h2', 'hd', 'co']:
+                setattr(self, el, self.par(f'cd_prof_{el}'))
+            self.NCO = self.par('cd_co')
+            self.av = self.par('av')
+            self.Av = self.par('avmax')
+            self.tgas = self.par('tgas')
+            self.pgas = self.par('pgas')
+            self.n = self.par('ntot')
+            self.nH = self.par('protdens')
+            self.uv_flux = self.par('uv_flux')
+            self.uv_dens = self.par('uv_dens')
+            self.h2t01= self.par('h2t01')
+            self.h2t01_cd = self.par('h2t01_cd')
+            self.OPR = self.par('OPR')
+            self.OPR_cd = self.par('OPR_cd')
+            self.h2fr = self.par('h2fr')
+           # self.t01 = self.par('t01')
 
-        self.readspecies()
+            self.readspecies()
 
-        if show_meta:
-            self.showMetadata()
 
-        self.file.close()
-        self.file = None
+            self.file.close()
+            self.file = None
 
-        if show_summary:
-            self.show_summary()
+            if show_summary:
+                self.show_summary()
 
-    def par(self, par=None):
+    def par(self, par=None,vertype=1):
         """
         Read parameter or array from the hdf5 file, specified by Metadata name
 
@@ -251,20 +270,43 @@ class model():
             self.file = h5py.File(self.folder + self.filename, 'r')
 
         meta = self.file['Metadata/Metadata']
+
         if par is not None:
             if self.fastread and par in self.pardict:
                 attr, ind, typ = self.pardict[par]
             else:
-                ind = np.where(meta[:, 3] == par.encode())[0]
-                if len(ind) > 0:
-                    attr = meta[ind, 0][0].decode() + '/' + meta[ind, 1][0].decode()
-                    typ = {'string': str, 'real': float, 'integer': int}[meta[ind, 5][0].decode()]
-                    ind = int(meta[ind, 2][0].decode())
+                attr, ind, typ = self.pardict['codeversion']
+                codeversion = self.file[attr][:, ind]
+                if codeversion[0] == 'PDR_1.5.4_rev_2083_210215':
+                    vertype = 0
+                elif codeversion[0] == 'PDR_1.5.4_rev_2053_200303':
+                    vertype = 1
+                if vertype:
+                    ind = np.where(meta[:, 3] == par.encode())[0]
+                    if len(ind) > 0:
+                        attr = meta[ind, 0][0].decode() + '/' + meta[ind, 1][0].decode()
+                        typ = {'string': str, 'real': float, 'integer': int}[meta[ind, 5][0].decode()]
+                        ind = int(meta[ind, 2][0].decode())
+                    else:
+                        return None
                 else:
-                    return None
+                    ind = np.where(meta[:, 3] == par)[0]
+                    if len(ind) > 0:
+                        attr = meta[ind, 0][0] + '/' + meta[ind, 1][0]
+                        typ = {'string': str, 'real': float, 'integer': int}[meta[ind, 5][0]]
+                        ind = int(meta[ind, 2][0])
+                    else:
+                        return None
         x = self.file[attr][:, ind]
         if len(x) == 1:
-            return typ(x[0].decode())
+            if isinstance(x[0], float):
+                return x[0]
+            else:
+                return typ(x[0])
+            #if vertype:
+            #    return typ(x[0].decode())
+            #else:
+            #    return typ(x[0])
         else:
             return x
 
@@ -296,7 +338,7 @@ class model():
 
         self.species = species
 
-    def show_summary(self, pars=['me', 'n', 'uv'], output=False):
+    def show_summary(self, pars=['Z', 'n', 'uv'], output=False):
         print('model: ' + self.name)
         if output:
             f = open(self.name+'dat', 'w')
@@ -322,7 +364,7 @@ class model():
             f.close()
 
     def plot_model(self,  parx='av', pars=['tgas', 'n', 'av','h2t01'], excs = None, species=None, logx=False, logy=True,
-                   legend=True, limit=None,borders=None, pyfit=False):
+                   legend=True, limit=None,borders=None, pyfit=False, lev = 0, ylevels = False):
         """
         Plot the model quantities
 
@@ -373,9 +415,15 @@ class model():
                 if 'CIj0/CI' in sp:
                     if pyfit:
                         self.plot_popratio(ax=ax[n+1+m], logx=logx, logy=logy, parx=p, sp = 'CI')
-                if 'COj0/CO' in sp:
+                if 'COj1/COj0' in sp:
                     if pyfit:
-                        self.plot_popratio(ax=ax[n+1+m], logx=logx, logy=logy, parx=p, sp = 'CO')
+                        self.plot_popratio(ax=ax[n+1+m], logx=logx, logy=logy, parx=p, sp = 'CO',lev=lev)
+                if ylevels:
+                    ax[n + 1 + m].axhline(14)
+                    ax[n + 1 + m].axhline(15)
+                    ax[n + 1 + m].axhline(16)
+                    ax[n + 1 + m].axhline(17)
+                    ax[n + 1 + m].axhline(18)
 
 
 #        def plot_popratio(self, species=None, ax=None, parx='av', logx=False, logy=False):
@@ -393,7 +441,7 @@ class model():
                 axs.axvline(x=v, ls='--', color='purple', alpha=0.7)
 
                 mask_fr = self.h2 < self.h2[-1] / 2
-                mask_fr *= 2*self.h2/(2*self.h2+self.hi) < 0.1
+                mask_fr *= 2*self.h2/(2*self.h2+self.h) < 0.1
                 v = np.log10(self.h2[mask_fr][-1])
                 print('h2fr border:', v)
                 axs.axvline(x=v, ls='-.', color='purple', alpha=0.7)
@@ -413,7 +461,7 @@ class model():
         #        for axs in ax:
         #            axs.axvline(x=v, ls='--', color=color,alpha=0.7)
 
-        #fig.suptitle(str(('n0=', self.n0, 'uv=', self.uv, 'me=',self.me, 'zeta=', self.zeta)), fontsize=14)
+        #fig.suptitle(str(('n0=', self.n0, 'uv=', self.uv, 'me=',self.Z, 'zeta=', self.zeta)), fontsize=14)
         fig.suptitle(self.name, fontsize=14)
 
 
@@ -421,7 +469,7 @@ class model():
         return fig
         #fig.tight_layout()
 
-    def plot_phys_cond(self, pars=['tgas', 'n', 'av','h2t01','uv_dens'], logx=True, logy = True, ax=None, legend=True,
+    def plot_phys_cond(self, pars=['tgas', 'n', 'av','h2t01','uv_dens'], logx=True, logy = True, ax=None, legend=False,
                        parx='x', limit=None,yscale='dec', ls='-',borders=None, fontsize=12, ylabel='$\\log$\\,Physical cond.',xlabel=True):
         """
         Plot the physical parameters in the model
@@ -445,7 +493,7 @@ class model():
                 xlabel = '$\log$(Distance), cm'
             elif parx == 'h2':
                 xlabel = 'log(NH2), cm-2'
-            elif parx == 'hi':
+            elif parx == 'h':
                 xlabel = 'log(NHI), cm-2'
             elif parx == 'ci':
                 xlabel = 'log(NCI), cm-2'
@@ -480,21 +528,20 @@ class model():
 
 
         lines = []
-        thb_names = ['cool_tot', 'cool_o','cool_cp', 'cool_c', 'cool_elrec', 'cool_free', 'cool_h', 'cool_h2',
+        thb_names = ['cool_tot', 'cool_o','cool_cp', 'cool_c', 'cool_co', 'cool_elrec', 'cool_free', 'cool_h', 'cool_h2',
           'heat_tot', 'heat_phel','heat_secp', 'heat_phot','heat_chem', 'heat_h2', 'heat_cr']
+        label = ''
         for i, p in enumerate(pars):
-            if i == 0:
-                axi = ax
-            else:
-                axi = ax
-                axi = ax.twinx()
+            axi = ax
             ylabel=''
             if p == 'tgas':
                 ylabel = '$\\log T_{\\rm kin}$, K'
+                label = '$T_{\\rm gas}$'
             #    yscale = 'dec'
             #    bot,top = 10,1e3
-            elif p == 'n':
+            elif p == 'n' or p =='nH':
                 ylabel = 'Density, cm'
+                label = '$n_{\\rm gas}$'
             #    yscale = 'dec'
             elif p in ['OPR']:
                 ylabel = 'OPR'
@@ -505,8 +552,9 @@ class model():
             #    yscale = 'dec'
             elif p == 'heat_tot':
                 ls = '--'
-
-            if p in ['tgas', 'n', 'av', 'h2t01','uv_dens','uv_flux','H2_photo_dest_prob','OPR','h2fr','pgas']:
+            elif p == 'pgas':
+                label = '$P_{\\rm gas}$'
+            if p in ['tgas', 'n', 'nH', 'av', 'h2t01','uv_dens','uv_flux','H2_photo_dest_prob','OPR','h2fr','pgas']:
                 y = getattr(self, p)[mask]
             else:
                 if p == 'tgas_m':
@@ -524,6 +572,7 @@ class model():
                     y = (self.sp['NH2j1'][mask]) / \
                         (self.sp['NH2j0'][mask])
                     z = []
+                    label = '$T_{\\rm 01}(NH_2)$'
                     for e in y:
                         z1 = root(polyJ01, x0=0.2, args=(e))
                         print('root_T01', e, -170.5 / np.log(z1.x), z1.x, polyJ01(z1.x, e))
@@ -551,6 +600,7 @@ class model():
                     y = 85.3*6/np.log(5./(self.sp['H2j2'][mask]/self.sp['H2j0'][mask]))
                 elif p == 'T01':
                     y = 85.3 * 2 / np.log(9. / (self.sp['H2j1'][mask] / self.sp['H2j0'][mask]))
+                    label = '$T_{\\rm 01}(H_2)$'
                 elif p == 'T13':
                     y = 85.3 * 9 / np.log(7. / 3. /(self.sp['H2j3'][mask] / self.sp['H2j1'][mask]))
                 elif p == 'T24':
@@ -566,12 +616,12 @@ class model():
                     print(p, y)
                     bot, top = 1, 15
                 elif p in thb_names:
-                    if p in ['heat_tot', 'heat_phel','heat_secp', 'heat_phot','heat_chem', 'heat_h2', 'heat_cr']:
-                        y = self.sp[p][mask]/(self.sp['H'][mask]+self.sp['H2'][mask])**2.0
-                    else:
-                        y = self.sp[p][mask]/(self.sp['H'][mask]+self.sp['H2'][mask])**2.0
-                    if p in ['heat_tot','cool_tot']:
-                        bot, top = -0.5*np.max(y),2*np.max(y)
+                #    if p in ['heat_tot', 'heat_phel','heat_secp', 'heat_phot','heat_chem', 'heat_h2', 'heat_cr']:
+                    y = self.sp[p][mask]/(self.sp['H'][mask]+self.sp['H2'][mask])**2.0
+                #    else:
+                #        y = self.sp[p][mask]/(self.sp['H'][mask]+self.sp['H2'][mask])**2.0
+                #    if p in ['heat_tot','cool_tot']:
+                #        bot, top = -0.5*np.max(y),2*np.max(y)
                 elif p in ['H2_diss']:
                     y = np.log10(self.sp[p][mask])
                 else:
@@ -585,9 +635,9 @@ class model():
                 #axi.set_ylabel(ylabel, color=color,fontsize=fontsize)
                 axi.set_ylim(1,5)
             if logy:
-                line, = axi.plot(x, np.log10(y), color=color, label=p, ls=ls)
+                line, = axi.plot(x, np.log10(y), color=color, label=label, ls=ls)
             else:
-                line, = axi.plot(x, y, color=color, label=p, ls=ls)
+                line, = axi.plot(x, y, color=color, label=label, ls=ls)
             lines.append(line)
 
             if 1:
@@ -595,19 +645,6 @@ class model():
                 axi.tick_params(which='major', length=5, direction='in', right='True', top='True')
                 axi.tick_params(which='minor', length=4, direction='in')
                 axi.tick_params(axis='both', which='major', labelsize=fontsize, direction='in')
-
-            if i > 0:
-                axi.spines['right'].set_position(('outward', 60*(i-1)))
-                axi.set_frame_on(True)
-                axi.patch.set_visible(False)
-                axi.axis('off')
-                axi.set_ylim(ax.get_ylim())
-
-
-            #for t in axi.get_yticklabels():
-            #    t.set_color(color)
-
-
 
             if yscale == 'log':
                 ax.set_yscale('log')
@@ -668,15 +705,15 @@ class model():
         if parx == 'av':
             xlabel = 'Av'
         elif parx == 'x':
-            xlabel = 'log(Distance), cm'
+            xlabel = '$\\log({\\rm Distance})$, cm'
         elif parx == 'h2':
-            xlabel = 'log(NH2), cm-2'
-        elif parx == 'hi':
+            xlabel = '$\\log(N_{\\rm H_2}),{\\rm\\,cm}^{-2}$'
+        elif parx == 'h':
             xlabel = 'log(NHI), cm-2'
         elif parx == 'ci':
             xlabel = 'log(NCI), cm-2'
         elif parx == 'co':
-            xlabel = 'log(NCO), cm-2'
+            xlabel = '$\\log(N_{\\rm CO}),{\\rm\\,cm}^{-2}$'
         elif parx == 'pgas':
             xlabel = 'pgas'
         elif parx == 'tgas':
@@ -711,7 +748,6 @@ class model():
 
 
         lab = label
-        print(x)
         for k_sp,s in enumerate(species):
             if '/' in s:
                 s1, s2 = s.split('/')[:]
@@ -739,6 +775,9 @@ class model():
                 lab = s
                 if s == 'H2':
                     lab = 'H$_2$'
+            else:
+                if k_sp>0:
+                    lab ='_nolegend_'
             if normed:
                 y = y/self.n0
             if logy:
@@ -783,18 +822,17 @@ class model():
             ax.tick_params(which='minor', length=3)
         return ax
 
-    def plot_popratio(self,  ax=None,parx='av',logx=False, logy=False, ls = '--', colors=None,sp='CI'):
+    def plot_popratio(self,  ax=None,parx='av',logx=False, logy=False, ls = '--', colors=None,sp='CI',lev=-1):
 
         #if species is None:
         #    species = self.species
-
         if parx == 'av':
             xlabel = 'Av'
         elif parx == 'x':
             xlabel = 'log(Distance), cm'
         elif parx == 'h2':
             xlabel = 'log(NH2), cm-2'
-        elif parx == 'hi':
+        elif parx == 'h':
             xlabel = 'log(NHI), cm-2'
         elif parx == 'ci':
             xlabel = 'log(NCI), cm-2'
@@ -808,24 +846,83 @@ class model():
             mask = getattr(self, parx) > 0
         else:
             mask = getattr(self, parx) > -1
-        mask*=np.log10(self.h2) < 21.5
+        mask*=np.log10(self.h2) < np.log10(self.h2[-1]/2)
         if logx:
             x = np.log10(getattr(self, parx)[mask])
         else:
             x = getattr(self, parx)[mask]
 
         tkin = self.tgas[mask]
-        ntot = self.n[mask]
+        ntot = self.nH[mask]
         fr = self.h2fr[mask]
         uv = self.uv*(self.uv_flux/self.uv_flux[0])[mask]
-        #tau0 = 0.5*46*(self.x[mask]/1e19)*(self.n[mask]/1e3)
-        tau0 = {}
-        jsp = ['1', '2','3','4']
-        zabs = self.tcmb/2.725 - 1
-        print('tcmb',self.tcmb/2.725 - 1)
+        if 0:
+            tau, beta_l, beta_r = [], [], []
+            file_path = pathH2exc+'/data/beta_co10.dat'
+            with open(file_path, 'r') as f:
+                for k, line in enumerate(f):
+                    if line[0] is not '#':
+                        values = [s for s in line.split()]
+                        if not (values[0][0] == '#'):
+                            tau.append(float(values[0]))  # wavelenght
+                            beta_l.append(float(values[3]))
+                            beta_r.append(float(values[4]))
 
-        for k,j in enumerate(jsp):
-            tau0[j] = 10*self.sp['NCO'][mask]/7e+017*46*(self.sp['COj'+str(k)][mask]/self.sp['COj'+str(1)][mask])
+            tau = np.array(tau)
+            beta_t = np.array((beta_l)) + np.array((beta_r))
+            av = -2.5 * np.log10(np.exp(-tau))
+            beta_coj0 = np.interp(self.av, av,beta_t)[mask]
+
+            tau, beta_l, beta_r = [], [], []
+            file_path = pathH2exc + '/data/beta_co21.dat'
+            with open(file_path, 'r') as f:
+                for k, line in enumerate(f):
+                    if line[0] is not '#':
+                        values = [s for s in line.split()]
+                        if not (values[0][0] == '#'):
+                            tau.append(float(values[0]))  # wavelenght
+                            beta_l.append(float(values[3]))
+                            beta_r.append(float(values[4]))
+
+            tau = np.array(tau)
+            beta_t = np.array((beta_l)) + np.array((beta_r))
+            av = -2.5 * np.log10(np.exp(-tau))
+            beta_coj1 = np.interp(self.av, av, beta_t)[mask]
+
+            tau, beta_l, beta_r = [], [], []
+            file_path = pathH2exc + '/data/beta_co32.dat'
+            with open(file_path, 'r') as f:
+                for k, line in enumerate(f):
+                    if line[0] is not '#':
+                        values = [s for s in line.split()]
+                        if not (values[0][0] == '#'):
+                            tau.append(float(values[0]))  # wavelenght
+                            beta_l.append(float(values[3]))
+                            beta_r.append(float(values[4]))
+
+            tau = np.array(tau)
+            beta_t = np.array((beta_l)) + np.array((beta_r))
+            av = -2.5 * np.log10(np.exp(-tau))
+            beta_coj2 = np.interp(self.av, av, beta_t)[mask]
+
+            tau, beta_l, beta_r = [], [], []
+            file_path = pathH2exc + '/data/beta_co43.dat'
+            with open(file_path, 'r') as f:
+                for k, line in enumerate(f):
+                    if line[0] is not '#':
+                        values = [s for s in line.split()]
+                        if not (values[0][0] == '#'):
+                            tau.append(float(values[0]))  # wavelenght
+                            beta_l.append(float(values[3]))
+                            beta_r.append(float(values[4]))
+
+            tau = np.array(tau)
+            beta_t = np.array((beta_l)) + np.array((beta_r))
+            av = -2.5 * np.log10(np.exp(-tau))
+            beta_coj3 = np.interp(self.av, av, beta_t)[mask]
+
+        jsp = [1, 2,3,4]
+        zabs = self.tcmb/2.725 - 1
 
 
         if sp == 'CI':
@@ -884,80 +981,80 @@ class model():
                 ax.set_ylim(-2.5, 0.1)
 
         if sp == 'CO':
-            pr = pyratio(z=zabs)
-            numlevels = 20
-            pr.add_spec('CO', num=numlevels)
-            #pr.set_pars(['rad', 'n', 'T', 'f'])
-            pr.set_pars(['rad', 'n', 'T', 'f', 'b_trap'])
-            spec = {}
-            for k in range(numlevels):
-                spec['COj' + str(k)] = []
-            x0 = []
-            results = {}
-            for i in range(0, len(tkin), 10):
-                for j in jsp:
-                    pr.pars['n'].value = np.log10(ntot[i])
-                    pr.pars['T'].value = np.log10(tkin[i])
-                    pr.pars['f'].value = np.log10(fr[i])
-                    pr.pars['rad'].value = np.log10(uv[i])
-                    pr.pars['b_trap'].value = 1/(1+0.5*tau0[j][i])
-                    results[j] = pr.predict(level=0)
-                    spec['COj' + j].append(results[j][int(j)])
-                    if 0:
-                        pr.balance(debug='C')
-
-
-                x0.append(x[i])
-                #for k in range(numlevels):
-                #    spec['COj' + str(k)].append(results[k])
-
-
-            for k in range(1,len(jsp)+1):
-                if colors is None:
-                    ax.plot(np.array(x0), np.array(spec['COj' + str(k)]), ls='--', lw=1)
-                else:
-                    print(k)
-                    ax.plot(np.array(x0), np.array(spec['COj' + str(k)]), ls='--', lw=1,color=colors[k-1])
-
+            # calculation with photon trapping
             if 0:
-                def getatomic(species, levels=[0, 1, 2]):
-                    if species == 'H2':
-                        return [H2energy[0, i] for i in levels], [stat_H2[i] for i in levels]
-                    elif species == 'CI':
-                        return [CIenergy[i] for i in levels], [stat_CI[i] for i in levels]
-                    elif species == 'CO':
-                        return [COenergy[i] for i in levels], [stat_CO[i] for i in levels]
-
-                x, stat = getatomic(species=sp, levels=[1,2,3,4,5,6])
-                for k in range(0,len(jsp)):
-                    ax.axhline(y=np.log10(stat[k]* np.exp(-x[k] / 2.725 / (1 + z))), ls='--')
-
-            if 1:
                 pr = pyratio(z=zabs)
-                numlevels = 20
+                numlevels = 10
                 pr.add_spec('CO', num=numlevels)
-                pr.set_pars(['rad', 'n', 'T', 'f'])
+                pr.set_pars(['rad', 'nH', 'T', 'f','trap'])
+                legend = 'CMB + Coll + trapping'
                 spec = {}
                 for k in range(numlevels):
                     spec['COj' + str(k)] = []
                 x0 = []
-                for i in range(0, len(tkin), 10):
-                    pr.pars['n'].value = np.log10(ntot[i])
+                for i in range(0, len(tkin), 30):
+                    pr.pars['nH'].value = np.log10(ntot[i])
                     pr.pars['T'].value = np.log10(tkin[i])
                     pr.pars['f'].value = np.log10(fr[i])
                     pr.pars['rad'].value = np.log10(uv[i])
-                    results = pr.predict(level=0)
+                    pr.pars['trap'].value = [beta_coj0[i],beta_coj1[i],beta_coj2[i],beta_coj3[i]]
+                    results = pr.predict(level=lev)
+                    for k in range(numlevels):
+                        spec['COj' + str(k)].append(results[k])
+                    x0.append(x[i])
+
+                '''
+                #    for j in jsp:
+                        pr.pars['n'].value = np.log10(ntot[i])
+                        pr.pars['T'].value = np.log10(tkin[i])
+                        pr.pars['f'].value = np.log10(fr[i])
+                        pr.pars['rad'].value = np.log10(uv[i])
+                        pr.pars['b_trap'].value = tau0[i] #0.5*1/(1+0.5*tau0[j][i])
+                        results[j] = pr.predict(level=0)
+                        spec['COj' + j].append(results[j][int(j)])
+                        if 0:
+                            pr.balance(debug='C')
+                '''
+
+
+
+                for k in range(1,len(jsp)+1):
+                    if colors is None:
+                        ax.plot(np.array(x0), np.array(spec['COj' + str(k)]), ls='--', lw=1)
+                    else:
+                        #print(k)
+                        ax.plot(np.array(x0), np.array(spec['COj' + str(k)]), ls='--', lw=1, color=colors[k - 1],
+                                label=legend)
+                        legend = "_nolegend_"
+                #pr.pars['b_trap'].value = 1.0
+                #MC = pr.balance(debug='C')
+                #MR = pr.balance(debug='rad')
+                #MI = pr.balance(debug='IR') + pr.balance(debug='A')
+            if 1:
+                pr = pyratio(z=zabs)
+                numlevels = 10
+                pr.add_spec('CO', num=numlevels)
+                pr.set_pars(['rad', 'nH', 'T', 'f'])
+                legend = 'CMB+Coll'
+                spec = {}
+                for k in range(numlevels):
+                    spec['COj' + str(k)] = []
+                x0 = []
+                for i in range(0, len(tkin)):
+                    pr.pars['nH'].value = np.log10(ntot[i])
+                    pr.pars['T'].value = np.log10(tkin[i])
+                    pr.pars['f'].value = np.log10(fr[i])
+                    pr.pars['rad'].value = np.log10(uv[i])
+                    results = pr.predict(level=lev)
                     x0.append(x[i])
                     for k in range(numlevels):
                         spec['COj' + str(k)].append(results[k])
-
-
-                for k in range(1, len(jsp) + 1):
+                for k in jsp:
                     if colors is None:
-                        ax.plot(np.array(x0), np.array(spec['COj' + str(k)]), ls='dotted', lw=1)
+                        ax.plot(np.array(x0), np.array(spec['COj' + str(k)]), ls='dotted', lw=2,label=legend)
                     else:
-                        print(k)
-                        ax.plot(np.array(x0), np.array(spec['COj' + str(k)]), ls='dotted', lw=1, color=colors[k - 1])
+                        ax.plot(np.array(x0), np.array(spec['COj' + str(k)]), ls='dotted', lw=1, color=colors[k - 1],label=legend)
+                        legend = "_nolegend_"
 
     def plot_exciation(self, ax=None, H2levels=['H2j0','H2j1','H2j2','H2j3','H2j4'], logN=[17,18],legend=True):
 
@@ -1008,22 +1105,30 @@ class model():
 
         cols = OrderedDict()
 
-        if logN is not None:
-            logN[list(logN.keys())[0]] -= np.log10(sides)
-            self.set_mask(logN=logN, sides=sides)
+        if logN == np.inf:
+            for s in species:
+                cols[s] = np.log10(integrate.cumtrapz(self.sp[s], x=self.x))
+        else:
+            if logN is not None:
+                if logN[list(logN.keys())[0]] is not None:
+                    #logN[list(logN.keys())[0]] -= np.log10(sides)
+                    self.set_mask(species=list(logN.keys())[0], logN=logN[list(logN.keys())[0]] - np.log10(sides), sides=sides)
+                else:
+                    self.set_mask(species=list(logN.keys())[0], logN=logN[list(logN.keys())[0]])
+
+#        if logN is not None:
+#            logN[list(logN.keys())[0]] -= np.log10(sides)
+#            self.set_mask(logN=logN, sides=sides)
 
             for s in species:
                 cols[s] = np.log10(np.trapz(self.sp[s][self.mask], x=self.x[self.mask])) + np.log10(sides)
 
-        else:
-            for s in species:
-                cols[s] = np.log10(integrate.cumtrapz(self.sp[s], x=self.x))
 
         self.cols = cols
 
         return self.cols
 
-    def set_mask(self, logN={'H': None}, sides=2):
+    def set_mask(self, species='H', logN=None, sides=2):
         """
         Calculate mask for a given threshold
 
@@ -1032,19 +1137,18 @@ class model():
 
         :return: None
         """
-        cols = np.insert(np.log10(integrate.cumtrapz(self.sp[list(logN.keys())[0]], x=self.x)), 0, 0)
-
-        l = int(len(self.x) / sides) + 1 if sides > 1 else len(self.x)
-        if logN[list(logN.keys())[0]] > cols[l-1]:
-            logN[list(logN.keys())[0]] = cols[l-1]
+        cols = np.log10(self.sp['N' + species])
+        #print(cols)
 
         if logN is not None:
-            self.mask = cols < logN[list(logN.keys())[0]]
+            l = int(len(self.x) / sides) + 1 if sides > 1 else len(self.x)
+            if logN > cols[l - 1]:
+                logN = cols[l - 1]
+            self.mask = cols < logN
         else:
             self.mask = cols > -1
 
     def lnLike(self, species={}, syst=0, verbose=False, relative=None):
-        print(species, relative)
         lnL = 0
         if 0:
             #verbose:
@@ -1056,8 +1160,6 @@ class model():
             else:
                 v1 = v / species[relative]
                 s = self.cols[k] - self.cols[relative]
-                #print('v1:', v1)
-                #print('s:', s)
 
             if syst > 0:
                 v1 *= a(0, syst, syst, 'l')
@@ -1084,22 +1186,33 @@ class model():
 
         mpars = OrderedDict()
         print('n0,uv:', self.n0, self.uv)
-
-        if logH2 is not None:
-            logH2[list(logH2.keys())[0]] -= np.log10(sides)
-            self.set_mask(logN=logH2, sides=sides)
-            maskH2 = self.mask
-            logH2[list(logH2.keys())[0]] -= 1
-            self.set_mask(logN=logH2, sides=sides)
-            maskH2 *= np.invert(self.mask)
-            #maskH2=self.mask*(self.h2fr>1e-2)
-        if logCI is not None:
-            logCI[list(logCI.keys())[0]] -= np.log10(sides)
-            self.set_mask(logN=logCI, sides=sides)
-            maskCI = self.mask
-            logCI[list(logCI.keys())[0]] -= 1
-            self.set_mask(logN=logCI, sides=sides)
-            maskCI *=np.invert(self.mask)
+        if pars is not None:
+            if logH2 is not None:
+                logH2[list(logH2.keys())[0]] -= np.log10(sides)
+                self.set_mask(logN=logH2, sides=sides)
+                maskH2 = self.mask
+                logH2[list(logH2.keys())[0]] -= 1
+                self.set_mask(logN=logH2, sides=sides)
+                maskH2 *= np.invert(self.mask)
+                #maskH2=self.mask*(self.h2fr>1e-2)
+            if logCI is not None:
+                logCI[list(logCI.keys())[0]] -= np.log10(sides)
+                self.set_mask(logN=logCI, sides=sides)
+                maskCI = self.mask
+                logCI[list(logCI.keys())[0]] -= 1
+                self.set_mask(logN=logCI, sides=sides)
+                maskCI *=np.invert(self.mask)
+            elif logH2 is not None:
+                logH2[list(logH2.keys())[0]] -= np.log10(sides)
+                self.set_mask(logN=logH2, sides=sides)
+                maskH2 = self.mask
+                logH2[list(logH2.keys())[0]] -= 1
+                self.set_mask(logN=logH2, sides=sides)
+                maskH2 *= np.invert(self.mask)
+            else:
+                maskH2 = self.mask
+                self.set_mask(logN={'H2':20}, sides=sides)
+                maskH2 *= np.invert(self.mask)
 
             for p in pars:
                 if p in ['T01']:
@@ -1120,17 +1233,15 @@ class model():
                     x0 = self.x[maskH2]
                     p0 = getattr(self, p)[maskH2]
                     mpars[p] = np.trapz(p0, x=x0)/(x0[-1]-x0[0])
-        else:
-            for p in pars:
-                if p in ['av']:
-                    mpars[p] = 0
-                else:
-                    mpars[p] = np.array(integrate.cumtrapz(getattr(self, p), x=self.x)) / self.x[-1]
+            #else:
+            #    for p in pars:
+            #        if p in ['av']:
+            #            mpars[p] = 0
+            #        else:
+            #            mpars[p] = np.array(integrate.cumtrapz(getattr(self, p), x=self.x)) / self.x[-1]
 
-        self.mpars = mpars
-        return self.mpars
-
-
+            self.mpars = mpars
+            return self.mpars
     def calc_T01_limit(self, parx='h2', limith2={'H2': 21.5}, logx=True,case=1):
         """calculate the H2 column density, where
         H2 rotational levels become thermal populated
@@ -1251,19 +1362,20 @@ class H2_exc():
         self.models = {}
         self.species = ['H', 'H+', 'H2', 'CI', 'C+', 'CO', 'C2', 'C13O', 'H2j0', 'H2j1', 'H2j2', 'H2j3', 'H2j4', 'H2j5', 'H2j6', 'H2j7', 'H2j8', 'H2j9', 'H2j10',
                         'COj0','COj1','COj2','COj3','COj4','COj5','COj6','COj7',
-                        'NH','NH2', 'NH2j0', 'NH2j1', 'NH2j2', 'NH2j3', 'NH2j4', 'NH2j5', 'NH2j6', 'NH2j7', 'NH2j8', 'NH2j9', 'NH2j10',
+                        'NH','NH2', 'NH+', 'NH2j0', 'NH2j1', 'NH2j2', 'NH2j3', 'NH2j4', 'NH2j5', 'NH2j6', 'NH2j7', 'NH2j8', 'NH2j9', 'NH2j10',
                         'NCI','NCj0', 'NCj1', 'NCj2','NC+',
                         'HD', 'HDj0', 'HDj1', 'CIj0', 'CIj1', 'CIj2',
                         'NCO', 'NCOj0','NCOj1','NCOj2','NCOj3','NCOj4','NCOj5', 'COj0', 'COj1', 'COj2','COj3',
                         'COj4', 'COj5','COj6','O','O+','el','He','He+',
                         'H2_dest_rate', 'H2_form_rate_er', 'H2_form_rate_lh', 'H2_photo_dest_prob','H2_diss',
-                        'cool_tot', 'cool_o', 'cool_cp', 'cool_c', 'cool_elrec', 'cool_free', 'cool_h','cool_h2',
+                        'cool_tot', 'cool_o', 'cool_cp', 'cool_c','cool_co', 'cool_elrec', 'cool_free', 'cool_h','cool_h2',
                         'heat_tot', 'heat_phel','heat_secp','OPR', 'heat_phot','heat_chem', 'heat_h2','heat_cr']
         self.readH2database(H2database)
 
     def readH2database(self, data='all'):
         import sys
         sys.path.append('/home/slava/science/codes/python/H2_excitation')
+        sys.path.append('/home/toksovogo/science/codes/python/3.5/H2_excitation')
         import H2_summary
 
         self.H2 = H2_summary.load_empty()
@@ -1296,6 +1408,9 @@ class H2_exc():
         if data == 'local':
             self.H2.append(H2_summary.load_Magellan())
             self.H2.append(H2_summary.load_MWH2CI())
+        if data == 'CO':
+            self.H2.append(H2_summary.load_co_sample())
+
 
     def readmodel(self, filename=None, show_summary=False, folder=None, printname=True):
         """
@@ -1312,10 +1427,8 @@ class H2_exc():
             self.models[m.name] = m
             self.current = m.name
 
-            if printname:
-                print(m.name, 'n0=', m.n0, 'uv=', m.uv, 'me=',m.me, 'zeta=', m.zeta, 'av=', m.av[-1],'tcmb=',m.tcmb)
-                if m.zeta != 2e-016*m.uv and m.zeta != 1.0e-016:
-                    print('err in CR rate', 2e-016*m.uv)
+            #if printname:
+            #    print(m.name, 'n0=', m.n0, 'uv=', m.uv, 'me=',m.Z, 'zeta=', m.cr, 'av=', m.av[-1],'tcmb=',m.tcmb)
 
             if show_summary:
                 m.showSummary()
@@ -1349,7 +1462,6 @@ class H2_exc():
         self.grid = {p: [] for p in pars}
         self.mask = []
 
-        #print(self.models)
         for name, model in self.models.items():
             for k, v in fixed.items():
                 if getattr(model, k) != v and v != 'all':
@@ -1359,7 +1471,6 @@ class H2_exc():
                     self.grid[p].append(getattr(model, p))
                 self.mask.append(name)
 
-        #print(self.grid)
         if show and len(pars) == 2:
             fig, ax = plt.subplots()
             for v1, v2 in zip(self.grid[pars[0]], self.grid[pars[1]]):
@@ -1399,14 +1510,6 @@ class H2_exc():
 
         return q
 
-    def listofPDR(self):
-        list = []
-        for q in self.H2.values():
-            for i_c, c in enumerate(q.comp):
-                name = "".join([q.name, '_', str(i_c)])
-                list.append(name)
-        return list
-
     def listofmodels(self, models=[]):
         """
         Return list of models
@@ -1433,7 +1536,7 @@ class H2_exc():
 
         return models
 
-    def compare(self, object='', species='H2', spmode = 'abs', mpars = ['tgas','pgas','pgas_h2'], models='current', syst=0.0, levels=[], others='ignore'):
+    def compare(self, object='', species='H2', spmode = 'abs', mpars = ['tgas','pgas'], models='current', syst=0.0,  syst_factor=1,levels=[], others='ignore', sides=2):
         """
         Calculate the column densities of H2 rotational levels for the list of models given the total H2 column density.
         and also log of likelihood
@@ -1449,6 +1552,7 @@ class H2_exc():
             column densities are stored in the dictionary <cols> attribute for each model
             log of likelihood value is stored in <lnL> attribute
         """
+        # syst factor (?)
 
         q = self.comp(object)
         if species in ['H2', 'CI', 'CO']:
@@ -1457,15 +1561,19 @@ class H2_exc():
                 full_keys = [s for s in q.e.keys() if (label in s) and ('v' not in s)]
                 label = species + 'j{:}'
                 keys = [label.format(i) for i in levels if label.format(i) in full_keys]
-                spec = OrderedDict([(s, q.e[s].col * a(0.0, syst, syst)) for s in keys])
+                spec = OrderedDict([(s, a(q.e[s].col.log().val, q.e[s].col.log().plus * syst_factor, q.e[s].col.log().minus * syst_factor, 'l') * a(0.0, syst, syst)) for s in keys])
                 if others in ['lower', 'upper']:
                     for k in full_keys:
                         if k not in keys:
-                            v = q.e[k].col * a(0.0, syst, syst)
+                            v = a(q.e[k].col.val, q.e[k].col.plus * syst_factor, q.e[k].col.minus * syst_factor)
+                            if syst > 0:
+                                v = v * a(0.0, syst, syst)
                             if others == 'lower':
                                 spec[k] = a(v.val - v.minus, t=others[0])
                             else:
                                 spec[k] = a(v.val + v.plus, t=others[0])
+        else:
+            keys, full_keys, logN = [], [], None
 
 
 
@@ -1476,38 +1584,36 @@ class H2_exc():
             elif spmode == 'rel':
                 relative = species+'j0'
                 logN = {'H2': q.e['H2'].col.val}
-#            if species == 'CO':
-#                logN = {'CO': q.e['CO'].col.val}
-#            elif species == 'H2':
-#                logN = {'H2': q.e['H2'].col.val}
-#            elif species == 'CI':
- #               logN = {'CI': q.e['Ci'].col.val}
             model.calc_cols(spec.keys(), logN=logN)
             #model.lnLike(OrderedDict([(s, q.e[s].col * a(0.0, syst, syst)) for s in keys]), relative=relative)
             model.lnLike(spec, relative=relative)
             if mpars is not None:
-                model.calc_mean_pars(pars=mpars, logH2={'H2': q.e['H2'].col.val},logCI={'CI': q.e['CI'].col.val})
+                if 'H2' in q.e.keys():
+                    logH2 = {'H2':q.e['H2'].col.val}
+                else:
+                    logH2 = None
+                if 'CI' in q.e.keys():
+                    logCI = {'CI':q.e['CI'].col.val}
+                else:
+                    logCI = None
+                print(model.name,'logH2,logCI', logH2,logCI)
+                model.calc_mean_pars(pars=mpars, logH2=logH2,logCI=logCI)
 
-    def comparegrid(self, object='0643', species='H2', spmode = 'abs', pars=[], fixed={}, syst=0.0, plot=True, show_best=True, levels='all', others='ignore'):
+    #def comparegrid(self, object='', species='H2', spmode = 'abs', pars=[], fixed={}, syst=0.0, plot=True, show_best=True, levels='all', others='ignore'):
+    def comparegrid(self, object='', species='H2', spmode = 'abs', pars=[], fixed={}, syst=0.0, syst_factor=1.0, plot=True, show_best=True, levels='all', others='ignore', sides=2):
+        print('comparegrid', syst, syst_factor, pars, fixed)
         self.setgrid(pars=pars, fixed=fixed, show=False)
         for el in ['H2', 'CI', 'CO']:
             if el in self.comp(object).e.keys():
                 self.grid['N'+el+'tot'] = self.comp(object).e[el].col.val
             else:
                 self.grid['N' + el + 'tot'] = None
-                #if 'CO' in self.comp(object).e.keys():
-        #    self.grid['NCOtot'] = self.comp(object).e['CO'].col.val
-        #else:
-        #    self.grid['NCOtot'] = None
-        #if 'CI' in self.comp(object).e.keys():
-        #    self.grid['NCItot'] = self.comp(object).e['CI'].col.val
-        #else:
-        #    self.grid['NCItot'] = None
-        #print(others)
-        self.compare(object, species=species, spmode = spmode, models=self.mask, syst=syst, levels=levels, others=others)
+
+        self.compare(object, species=species, spmode = spmode, models=self.mask, syst=syst, syst_factor=syst_factor, levels=levels, others=others, mpars=None)
         self.grid['lnL'] = np.asarray([self.models[m].lnL for m in self.mask])
         self.grid['cols'] = np.asarray([self.models[m].cols for m in self.mask])
-        self.grid['mpars'] = np.asarray([self.models[m].mpars for m in self.mask])
+        self.grid['dims'] = len(pars)
+        #self.grid['mpars'] = np.asarray([self.models[m].mpars for m in self.mask])
         #print(self.grid)
 
         if plot:
@@ -1589,7 +1695,7 @@ class H2_exc():
                     label = "_nolegend_"
                 for k in range(len(y)):
                     if typ[k] == 'm':
-                        print('err_H2_',k,column(y, 2)[k], column(y, 1)[k])
+                        #print('err_H2_',k,column(y, 2)[k], column(y, 1)[k])
                         #ax.errorbar([x[k]], [column(y, 0)[k]], yerr=[[column(y, 1)[k]], [column(y, 2)[k]]],
                         if 1:
                             ax.errorbar([x[k]], [column(y, 0)[k]], yerr=[[column(y, 2)[k]], [column(y, 1)[k]]],
@@ -1612,8 +1718,12 @@ class H2_exc():
             ax.tick_params(which='both', width=1, direction='in', labelsize=fontsize, right='True', top='True')
             ax.tick_params(which='major', length=5)
             ax.tick_params(which='minor', length=2)
-            ax.set_ylabel('$\log~N_{\\rm{J}}($'+species+'$)/g_{\\rm{J}}$', fontsize=fontsize)
-            ax.set_xlabel('Energy of {:s} levels,'.format(species) + ' cm$^{-1}$', fontsize=fontsize)
+            if species == 'H2':
+                species = 'H_2'
+            ax.set_ylabel('$\log~N_{\\rm{J}}({\\rm{' + species + '}})/g_{\\rm{J}}$', fontsize=fontsize)
+            if species == 'CI':
+                ax.set_ylabel('$\log~N_{\\rm{J}}({\\rm{' + species + '}})/g_{\\rm{J}}-\log~N_{\\rm{0}}/g_{\\rm{0}}$', fontsize=fontsize)
+            ax.set_xlabel('Energy of ${\\rm{'+species+'}}$ levels, cm$^{-1}$', fontsize=fontsize)
         return ax
 
     def plot_models(self, ax=None, models='current', speciesname=['H'], logN=None, species='<7', legend=True, logy=True,color='royalblue',labelsize = 12,msize=5,label=None):
@@ -1672,6 +1782,19 @@ class H2_exc():
 
         return ax
 
+    def plot_one_parameter_vary(self, parx='x', pary='NH2', ax=None, pars=None, fixed={}):
+        if ax is None:
+            fig, ax = plt.subplots()
+
+        species = [pary]
+
+        models = self.setgrid(pars=[pars], fixed=fixed)
+        for m in self.listofmodels(models):
+            print(m.name)
+            m.plot_profiles(species=species, logx=True, logy=True, label=m.name, ax=ax, legend=False, parx=parx,
+                            limit=None)
+
+        return ax
 #    def compare_models(self, speciesname=['H'], ax=None, models='current', physcondname=False, logy=False, parx='av'):
 #        """
 #        Plot comparison of certain quantities for specified models
@@ -1755,7 +1878,8 @@ class H2_exc():
         attr = meta[ind, 0][0].decode() + '/' + meta[ind, 1][0].decode()
         data = self.file[attr]
         d = data[0, int(meta[ind, 2][0].decode())]
-        data[0, int(meta[ind, 2][0].decode())] = d[0:3] + b'160' + d[6:]
+        data[0, int(meta[ind, 2][0].decode())] = d[0:3] + b'60' + d[5:]
+        #data[0, int(meta[ind, 2][0].decode())] = d[0:3] + b'160' + d[6:]
         self.file.close()
 
     def best(self, object='', models='all', syst=0.0):
@@ -1763,7 +1887,7 @@ class H2_exc():
         self.compare(object=object, models=[m.name for m in models], syst=syst)
         return models[np.argmax([m.lnL for m in models])].name
 
-    def calculate_T01_grid(self,species='H2', pars=[], fixed={},plot=False,case=1):
+    def calc_T01_grid(self,species='H2', pars=[], fixed={},plot=True,case=1):
         self.setgrid(pars=pars, fixed=fixed, show=False)
         self.grid['NH2th'] = np.asarray([self.models[m].calc_T01_limit(limith2={'H2': 21.5},case=case) for m in self.mask])
         if plot:
@@ -1774,10 +1898,30 @@ class H2_exc():
                     ax.scatter(v1, v2, 0)
                     ax.text(v1, v2, '{:.1f}'.format(l), size=20)
 
+    def calc_logN_grid(self,species='H2', pars=[], fixed={},plot=False):
+        self.setgrid(pars=pars, fixed=fixed, show=False)
+        self.grid['N'+species] = np.asarray([np.log10(self.models[m].sp['N'+species][-1]) for m in self.mask])
+        if plot:
+            if len(pars) == 2:
+                fig, ax = plt.subplots(2,1)
+                print(pars[0])
+                for v1, v2,l in zip(self.grid[pars[0]],self.grid[pars[1]], self.grid['N'+species]):
+                    v1,v2 = np.log10(v1),v2
+                    ax[0].scatter(v1, v2, 0)
+                    ax[0].text(v1, v2, '{:.1f}'.format(l), size=12)
+                    ax[1].scatter(v1,l,s=10,color='red')
+                ax[0].set_xlabel('nH')
+                ax[0].set_ylabel('Av max')
+                ax[1].set_xlabel('nH')
+                ax[1].set_ylabel('log N(CO) max')
+
+                plt.show()
+
     def calc_pars_grid(self,pars = [], models='current', logN = {'H2': 20}):
         self.setgrid(pars=pars, show=False)
         for m in self.mask:
-            self.models[m].calc_mean_pars(pars=['tgas','pgas','pgas_h2'], logN=logN)
+            self.models[m].calc_mean_pars(pars=None, logN=logN)
+            #self.models[m].calc_mean_pars(pars=['tgas','pgas'], logN=logN)
         self.grid['mpars'] = np.asarray([self.models[m].mpars for m in self.mask])
 
 
@@ -1789,40 +1933,38 @@ if __name__ == '__main__':
 
     labelsize=12
 
-    if 1:
+    if 0:
         fig, ax = plt.subplots(1,2)
         fig2, ax2 = plt.subplots(1,2)
-        H2 = H2_exc(folder='./data/sample/1_5_4/tmp/')
+        H2 = H2_exc(folder='./data/sample/1_5_4/tmp3/')
         H2.readfolder()
         colors = ['red','blue','green']
         for k,m in enumerate(H2.listofmodels()):
             if 1:
-                m.plot_phys_cond(pars=['tgas', 'pgas'], logx=True, logy = True, ax=ax[0], legend=True, parx='ci')
+                m.plot_phys_cond(pars=['tgas', 'pgas'], logx=True, logy = True, ax=ax[0], legend=True, parx='co')
             if 1:
-                m.plot_profiles(ax=ax[1],species=['NCj0/NCI','NCj1/NCI','NCj2/NCI'], logx=True, logy=True,parx='pgas',limit={'H2':21})
-                m.plot_profiles(ax=ax2[0], species=['NH2j0/NH2', 'NH2j1/NH2','NH2j2/NH2'], logx=True, logy=True, parx='ci')
-                m.plot_profiles(ax=ax2[1], species=['NH2j0/NH2', 'NH2j1/NH2', 'NH2j2/NH2'], logx=True, logy=True, parx='tgas',limit={'H2':21})
+                m.plot_profiles(ax=ax[1],species=['H','H2','CI','CO'], logx=True, logy=True,parx='co')
+                m.plot_profiles(ax=ax2[0], species=['NH2', 'NCI','NH','NCO'], logx=True, logy=True, parx='av')
+                #m.plot_profiles(ax=ax2[1], species=['NH2j0/NH2', 'NH2j1/NH2', 'NH2j2/NH2'], logx=True, logy=True, parx='tgas',limit={'H2':21})
 
-    if 0:
-#        for s in ['z0_1','z0_3','z1_0','z3_0']:
-        for s in ['z0_1']:
-            if 1:
-                #H2 = H2_exc(folder='data/sample/1_5_4/av0_5_cmb2_5_{:s}_n_uv'.format(s))
-                #H2 = H2_exc(folder='data/sample/1_5_4/av2_0_cmb0_0_z1_0_n_uv')
-                H2 = H2_exc(folder='data/sample/1_5_4/test')
-                H2.readfolder()
-                pars = {'n0': 'x', 'uv': 'y'}
-                H2.calc_pars_grid(pars=list(pars.keys()))
-                #H2.calculate_T01_grid(pars=list(pars.keys()),plot=True,case=1)
-                grid = H2.grid
-                x, y = np.log10(grid[list(pars.keys())[list(pars.values()).index('x')]]), np.log10(
-                    grid[list(pars.keys())[list(pars.values()).index('y')]])
-                print('stop')
-                mp = H2.grid['mpars'][0].keys()
-                H2.mpars = {}
-                for p in mp:
-                    H2.mpars[p] = Rbf(x, y, np.asarray([c[p] for c in grid['mpars']]), function='multiquadric',
-                                        smooth=0.1)
+    if 1:
+        if 1:
+            H2 = H2_exc(folder='data/sample/1_5_4/ver2083/grid-n-av-uv1e0')
+            #H2 = H2_exc(folder='data/sample/1_5_4/ver2053/av10_cmb0_0_me1e0_n_uv')
+            H2.readmodel(filename='pdr_grid_av0_5_n1e3_uv1e0_s_20.hdf5')
+            #H2.readfolder()
+            pars = {'n0': 'x', 'avmax': 'y'}
+            #H2.setgrid(pars=list(pars.keys()), show=False)
+            #grid = H2.grid
+            #x, y = np.log10(grid[list(pars.keys())[list(pars.values()).index('x')]]), np.log10(
+            #    grid[list(pars.keys())[list(pars.values()).index('y')]])
+            #print('stop')
+
+
+            #H2.calc_logN_grid(species='CO', pars=list(pars.keys()), fixed={}, plot=True)
+            #H2.calc_T01_grid(pars=pars)
+            if 0:
+                H2.logN = Rbf(x, y, H2.grid['NCO'], function='multiquadric', smooth=0.1)
 
                 delta = 0.2
                 num = 100
@@ -1830,13 +1972,13 @@ if __name__ == '__main__':
                 x1, y1 = x, y
                 z1 = np.zeros_like(x1)
                 for i, xi in enumerate(x):
-                    z1[i] = H2.mpars['tgas'](xi,y[i])
+                    z1[i] = H2.logN(xi,y[i])
                 x, y = np.linspace(xmin, xmax, num), np.linspace(ymin, ymax, num)
                 X, Y = np.meshgrid(x, y)
                 z = np.zeros_like(X)
                 for i, xi in enumerate(x):
                     for k, yi in enumerate(y):
-                        z[k, i] = H2.mpars['tgas'](xi, yi)
+                        z[k, i] = H2.logN(xi, yi)
                 if 1:
                     fig, ax = plt.subplots()
                     c = ax.pcolor(X, Y, z, cmap='Purples') #, vmin=1.0, vmax=4.0)
@@ -1847,29 +1989,25 @@ if __name__ == '__main__':
                     ax.set_xlabel('log nH')
                     ax.set_ylabel('log Iuv')
 
-                print('stop')
-                #z=np.asarray([c for c in grid['NH2th']])
-                #with open('temp/thermal_limit_{:s}_c1_fr50_t01.pkl'.format(s), 'wb') as f:
-                #    pickle.dump([x, y, z], f)
-            if 0:
-                #interpolate
-                z_rbf = Rbf(x, y, np.asarray([c for c in z]), function='multiquadric', smooth=0.1)
+        if 0:
+            #interpolate
+            z_rbf = Rbf(x, y, np.asarray([c for c in z]), function='multiquadric', smooth=0.1)
 
-                num = 50
-                x, y = np.log10(grid[list(pars.keys())[list(pars.values()).index('x')]]), np.log10(
-                    grid[list(pars.keys())[list(pars.values()).index('y')]])
-                x1, y1,z1 = x, y,z  # copy for save
-                xmin,xmax,ymin,ymax = 1,4,0,1
-                x, y = np.linspace(xmin, xmax, num), np.linspace(ymin,ymax,num)
-                X, Y = np.meshgrid(x, y)
-                z = np.zeros_like(X)
-                for i, xi in enumerate(x):
-                    for k, yi in enumerate(y):
-                        z[k, i] = z_rbf(xi,yi)
-                if 1:
-                    fig, ax = plt.subplots()
-                    ax.pcolor(X, Y, z, cmap='hot_r', vmin=15, vmax=18)
-                    ax.scatter(x1, y1, 100, z1, cmap='hot_r', vmin=15, vmax=18)  # ,edgecolors='black')
+            num = 50
+            x, y = np.log10(grid[list(pars.keys())[list(pars.values()).index('x')]]), np.log10(
+                grid[list(pars.keys())[list(pars.values()).index('y')]])
+            x1, y1,z1 = x, y,z  # copy for save
+            xmin,xmax,ymin,ymax = 1,4,0,1
+            x, y = np.linspace(xmin, xmax, num), np.linspace(ymin,ymax,num)
+            X, Y = np.meshgrid(x, y)
+            z = np.zeros_like(X)
+            for i, xi in enumerate(x):
+                for k, yi in enumerate(y):
+                    z[k, i] = z_rbf(xi,yi)
+            if 1:
+                fig, ax = plt.subplots()
+                ax.pcolor(X, Y, z, cmap='hot_r', vmin=15, vmax=18)
+                ax.scatter(x1, y1, 100, z1, cmap='hot_r', vmin=15, vmax=18)  # ,edgecolors='black')
 
     #plt.tight_layout()
     plt.show()

@@ -1,8 +1,13 @@
 from astropy.io import ascii
+import astropy.constants as ac
+from astropy.cosmology import FlatLambdaCDM
 from functools import partial
-from matplotlib import cm
 from io import StringIO
+from matplotlib import cm
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+from matplotlib.ticker import AutoMinorLocator, MultipleLocator
+import numpy as np
 import pickle
 from PyQt5.QtCore import (Qt, )
 from PyQt5.QtGui import (QFont, )
@@ -10,7 +15,9 @@ from PyQt5.QtWidgets import (QApplication, QMessageBox, QMainWindow, QSplitter, 
                              QVBoxLayout, QHBoxLayout, QPushButton, QHeaderView, QCheckBox,
                              QRadioButton, QButtonGroup, QComboBox, QTableView, QLineEdit)
 import pyqtgraph as pg
-from scipy.interpolate import interp2d, RectBivariateSpline, Rbf
+from scipy.interpolate import interp1d, interp2d, RectBivariateSpline, Rbf
+from scipy.interpolate import RBFInterpolator
+from scipy.optimize import bisect
 import sys
 sys.path.append('/home/slava/science/codes/python')
 from H2_exc import *
@@ -77,7 +84,6 @@ class image():
             return z[np.min([z.shape[0]-1, (np.abs(self.y - y)).argmin()]), np.min([z.shape[1]-1, (np.abs(self.x - x)).argmin()])]
         else:
             return None
-
 
 class plotExc(pg.PlotWidget):
     def __init__(self, parent):
@@ -166,16 +172,57 @@ class plotExc(pg.PlotWidget):
             tcmb = 2.725*(1+redshift)
             j = np.sort([int(s[3:]) for s in cols.keys()])
             x, stat = self.getatomic(species, levels=j)
-            mod = [cols0 -np.log10(stat[i]) + np.log10(np.exp(-x[i] / (tcmb / 1.428))) for i in j]
+            mod = [cols0  + np.log10(np.exp(-x[i] *1.438/ tcmb )) for i in j]
             if spmode == 'rel':
                 mod -= mod[0]
-            self.temp_cmb = pg.PlotCurveItem(x, mod)
+            self.temp_cmb = pg.PlotCurveItem(x, mod, pen='r')
             self.vb.addItem(self.temp_cmb)
             self.redraw()
+            if 0:
+                tcmb = 2.725/1.438
+                print(x,tcmb)
+                mod = [cols0 - np.log10(np.exp(1))*x[i]*1.438 / tcmb  for i in j]
+                if spmode == 'rel':
+                    mod -= mod[0]
+                self.temp_cmb_corr = pg.PlotCurveItem(x, mod, pen='g')
+                self.vb.addItem(self.temp_cmb_corr)
+                self.redraw()
         else:
             try:
                 self.vb.removeItem(self.temp_cmb)
                 self.legend_model.removeItem(self.temp_cmb)
+                self.vb.removeItem(self.temp_cmb_corr)
+                self.legend_model.removeItem(self.temp_cmb_corr)
+            except:
+                pass
+
+    def add_texc(self, cols=None, cols0=None, Texc=2.723, add=True):
+        if add:
+            species = str(self.parent.grid_pars.species.currentText())
+            spmode = str(self.parent.grid_pars.spmode.currentText())
+            j = np.sort([int(s[3:]) for s in cols.keys()])
+            x, stat = self.getatomic(species, levels=j)
+            mod = [cols0 + np.log10(np.exp(-x[i] * 1.438 / Texc)) for i in j]
+            if spmode == 'rel':
+                mod -= mod[0]
+            self.temp_exc = pg.PlotCurveItem(x, mod, pen='b')
+            self.vb.addItem(self.temp_exc)
+            self.redraw()
+            if 0:
+                Texc = Texc / 1.438
+                print(x, Texc)
+                mod = [cols0 - np.log10(np.exp(1)) * x[i] * 1.438 / Texc for i in j]
+                if spmode == 'rel':
+                    mod -= mod[0]
+                self.temp_exc_corr = pg.PlotCurveItem(x, mod, pen='g')
+                self.vb.addItem(self.temp_exc_corr)
+                self.redraw()
+        else:
+            try:
+                self.vb.removeItem(self.temp_exc)
+                self.legend_model.removeItem(self.temp_exc)
+                self.vb.removeItem(self.temp_exc_corr)
+                self.legend_model.removeItem(self.temp_exc_corr)
             except:
                 pass
 
@@ -274,7 +321,7 @@ class textLabel(pg.TextItem):
         #print(self.parent.parent.H2.grid['NH2tot'])
         m = self.parent.parent.H2.listofmodels(self.name)[0]
         borders = {}
-        for el in ['H2', 'CI', 'CO']:
+        for el in ['H2', 'CO']:
             if self.parent.parent.H2.grid['N' + el + 'tot'] is not None:
                 borders[el] = self.parent.parent.H2.grid['N' + el + 'tot']-0.3
             else:
@@ -283,12 +330,15 @@ class textLabel(pg.TextItem):
         #m.plot_model(parx='h2', pars=[['tgas','n','pgas'],['heat_phel','heat_h2','heat_tot'],['cool_h2','cool_o','cool_elrec','cool_tot','cool_cp']],
         #             species=[['H2j0/H2', 'H2j1/H2', 'H2j2/H2','H2j3/H2', 'H2j4/H2'],['H','H2','H+','el','C']],
         #             logx=True, logy=True, limit={'H2': self.parent.parent.H2.grid['NH2tot'] -0.3 }) #, limit={'H2':21} #['OPR','OPR_logNJ1/J02','OPR_logNJ1/J0'],['uv_dens'],['H2_dest_rate'],
-        m.plot_model(parx='h2', #pars=[['tgas','n', 'pgas','T01']], #
-                     pars=[['tgas','Nh2t01','Nh2t02','tgas_m']],
-                     species=[['NH2j0/NH2', 'NH2j1/NH2', 'NH2j2/NH2', 'NH2j3/NH2'], ['NH', 'NH2', 'NCI'],
-                              ['H/H2', 'H+/H2']],
-                     #species=[['NH2j0/NH2', 'NH2j1/NH2', 'NH2j2/NH2','NH2j3/NH2'],['NH', 'NH2','NCI','NCO'],['H', 'H2','CI','CO','C+','H+'],
-                     #         ['COj0','COj1','COj2','COj3'], ['NCj0/NCI','NCj1/NCI','NCj2/NCI']],
+        m.plot_model(parx='av', #pars=[['tgas','n', 'pgas','T01']], #
+                     pars=[['tgas','n','pgas']],
+                     #species=[['NH2j0/NH2', 'NH2j1/NH2', 'NH2j2/NH2', 'NH2j3/NH2'], ['NH', 'NH2', 'NCI','NCO'],
+                     #         ['H/H2', 'H+/H2']],
+                     species = [['H', 'H2','CI','CO','C+','H+'],['NH', 'NH2','NCI','NCO'],['cool_cp','cool_c','cool_co', 'cool_tot']],
+                     #species=[['H', 'H2','CI','CO','C+','H+'],['H2j0/H2', 'H2j1/H2', 'H2j2/H2','H2j3/H2','H2j4/H2'],['NH', 'NH2','NCI','NCO','NC+','NH+'],
+                              #['NH2j0', 'NH2j1', 'NH2j2', 'NH2j3', 'NH2j4'], ['NH', 'NH2','NCI','NCO','NC+','NH+']],
+                              #['COj0/CO','COj1/CO','COj2/CO','COj3/CO'],['CIj0/CI','CIj1/CI','CIj2/CI']],
+                     #species=[['NH', 'NH2', 'NCI', 'NCO']],
                      logx=True, logy=True, borders=borders) #, 'CI': self.parent.parent.H2.grid['NCOtot']-0.3}) #, limit={'H2':24})
                      #limit={'H2': self.parent.parent.H2.grid['NH2tot'] -0.3}) #, limit={'H2':21} #['OPR','OPR_logNJ1/J02','OPR_logNJ1/J0'],['uv_dens'],['H2_dest_rate'],
 
@@ -300,11 +350,11 @@ class textLabel(pg.TextItem):
         m = self.parent.parent.H2.listofmodels(self.name)[0]
         sp = self.parent.parent.grid_pars.species.currentText()
         if sp == 'CI':
-            m.plot_model(parx='x', species=[['CIj0/CI','CIj1/CI','CIj2/CI'],['NCj0/NCI','NCj1/NCI','NCj2/NCI']], pyfit=True,
+            m.plot_model(parx='co', species=[['CIj0/CI','CIj1/CI','CIj2/CI'],['NCj0/NCI','NCj1/NCI','NCj2/NCI']], pyfit=True,
                          logx=True, logy=True, borders={'H2': self.parent.parent.H2.grid['NH2tot']-0.3, 'CI': self.parent.parent.H2.grid['NCItot']-0.3,})
         elif sp == 'CO':
-            m.plot_model(parx='x', species=[['COj0/CO', 'COj1/CO', 'COj2/CO'], ['NCOj0/NCO', 'NCOj1/NCO', 'NCOj2/NCO']],
-                         pyfit=True,
+            m.plot_model(parx='co',  pars=[['tgas','n','pgas']], species=[['COj1/COj0', 'COj2/COj0','COj3/COj0','COj4/COj0'],['NCOj0', 'NCOj1','NCOj2','NCOj3','NCOj4']],
+                         pyfit=True, lev = 0,
                          logx=True, logy=True, borders={'H2': self.parent.parent.H2.grid['NH2tot'] - 0.3,
                                                         'CO': self.parent.parent.H2.grid['NCOtot'] - 0.3, })
 
@@ -367,35 +417,82 @@ class plotGrid(pg.PlotWidget):
             self.image.setLevels(self.grid.levels)
             self.vb.addItem(self.image)
 
-    def mousePressEvent(self, event):
-        super(plotGrid, self).mousePressEvent(event)
-        if event.button() == Qt.LeftButton:
-            if self.s_status:
-                name = self.parent.H2.grid['name']
+    def updateUVAxis(self):
+        self.uv_axis.setGeometry(self.getPlotItem().sceneBoundingRect())
+        self.uv_axis.linkedViewChanged(self.getViewBox(), self.uv_axis.YAxis)
+        MainPlotXMin, MainPlotXMax = self.viewRange()[1]
+        print(self.viewRange())
+        scale = {'Mathis': 0, 'Draine': np.log10(1.39), 'Habing': np.log10(0.81)}
+        if self.parent.grid_pars.uv_type.currentText() in ['Mathis', 'Draine', 'Habing']:
+            AuxPlotXMin, AuxPlotXMax = MainPlotXMin + scale[
+                self.parent.grid_pars.uv_type.currentText()], MainPlotXMax + self.parent.grid_pars.uv_type.currentText()
+
+        elif self.parent.grid_pars.uv_type.currentText() == 'AGN':
+            AuxPlotXMin, AuxPlotXMax = -0.5 * MainPlotXMin, -0.5 * MainPlotXMax
+        print(AuxPlotXMin, AuxPlotXMax)
+
+        self.uv_axis.setYRange(AuxPlotXMax, AuxPlotXMin, padding=0)
+
+    def mousePressEvent(self, event, pos=None):
+        print(pos)
+        if pos is None:
+            super(plotGrid, self).mousePressEvent(event)
+            if event.button() == Qt.LeftButton:
                 self.mousePoint = self.vb.mapSceneToView(event.pos())
-                spmode = str(self.parent.grid_pars.spmode.currentText())
-                spname = str(self.parent.grid_pars.species.currentText())
-                print(self.mousePoint.x(), self.mousePoint.y())
-                if self.parent.grid_pars.cols is not None:
-                    cols = {}
-                    sp = self.parent.H2.grid['cols'][0].keys()
-                    lnL = 0
-                    cols0 = self.parent.grid_pars.cols[spname + 'j0'](self.mousePoint.x(), self.mousePoint.y())
-                    for s in sp:
-                        v = self.parent.H2.comp(name).e[s].col
-                        cols[s] = self.parent.grid_pars.cols[s](self.mousePoint.x(), self.mousePoint.y())
-                        if spmode == 'rel':
-                            v = v/ self.parent.H2.comp(name).e[spname + 'j0'].col.log() #a(cols0,0,0,'l')
-                            cols[s] -=cols0
-                        v1 = v * a(0, 0.2, 0.2, 'l')
-                        if v.type == 'm':
-                            lnL += v1.lnL(cols[s])
-                        print(s, cols[s], v1.val, lnL)
-                    self.parent.plot_exc.add_temp(cols, add=False)
-                    self.parent.plot_exc.add_temp(cols, pars=[self.mousePoint.x(), self.mousePoint.y()])
-                    if spname == 'CO':
-                        self.parent.plot_exc.add_cmb(add=False)
-                        self.parent.plot_exc.add_cmb(cols,cols0)
+                self.x, self.y = self.mousePoint.x(), self.mousePoint.y()
+        else:
+            self.x, self.y = pos
+        print(self.x, self.y)
+        if self.s_status:
+            name = self.parent.H2.grid['name']
+            if self.parent.grid_pars.uv_type.currentText() == 'AGN':
+                grid = self.parent.grid_pars.pars
+                pars = [list(grid.keys())[list(grid.values()).index('x')],
+                        list(grid.keys())[list(grid.values()).index('y')]]
+                ind = pars.index('uv')
+                print(self.parent.grid_pars.rescale)
+                if ind == 0:
+                    self.x = np.log10(self.parent.grid_pars.rescale / 10 ** (self.x * 2))
+                else:
+                    self.y = np.log10(self.parent.grid_pars.rescale / 10 ** (self.y * 2))
+            if self.parent.grid_pars.cols is not None:
+                cols = {}
+                sp = self.parent.H2.grid['cols'][0].keys()
+                lnL = 0
+                for s in sp:
+                    v = self.parent.H2.comp(name).e[s].col
+                    if self.parent.H2.grid['ndims'] == 2:
+                        cols[s] = self.parent.grid_pars.cols[s](self.x, self.y)
+                    elif self.parent.H2.grid['ndims'] == 3:
+                        cols[s] = self.parent.grid_pars.cols[s](
+                            [[self.x, self.y, float(self.parent.grid_pars.zval.text())]])[0]
+                    print(s, cols[s])
+                    v1 = v * a(0, 0.2, 0.2, 'l')
+                    if v.type == 'm':
+                        lnL += v1.lnL(cols[s])
+                self.parent.plot_exc.add_temp(cols, add=False)
+                self.parent.plot_exc.add_temp(cols, pars=[self.x, self.y])
+                if 1:
+                    sy = self.parent.H2.comp(name)
+                    if spname == 'H2':
+                        if 'T01' in sy.e.keys():
+                            Texc = sy.e['T01'].col.val
+                    elif spname == 'CO':
+                        if 'T_co' in sy.e.keys():
+                            Texc = sy.e['T_co'].col.val
+                            Texcp = sy.e['T_co'].col.val + sy.e['T_co'].col.plus
+                            Texcm = sy.e['T_co'].col.val - sy.e['T_co'].col.minus
+                        #Texc = 2.723*(1+sy.z)
+
+
+                    self.parent.plot_exc.add_texc(add=False)
+                    self.parent.plot_exc.add_texc(cols,cols0,Texc=Texc)
+                    #self.parent.plot_exc.add_texc(cols, cols0, Texc=Texcp)
+                    #self.parent.plot_exc.add_texc(cols, cols0, Texc=Texcm)
+                if spname == 'CO':
+                    self.parent.plot_exc.add_cmb(add=False)
+                    sy = self.parent.H2.comp(name)
+                    self.parent.plot_exc.add_cmb(cols,cols0,redshift=sy.z)
 
 
     def keyPressEvent(self, event):
@@ -447,26 +544,35 @@ class QSOlistTable(pg.TableWidget):
     def compare(self, species='H2', spmode ='abs'):
         grid = self.parent.parent.grid_pars.pars
         syst = float(self.parent.parent.grid_pars.addSyst.text()) if self.parent.parent.grid_pars.addSyst.text().strip() != '' else 0
+        syst_factor = float(self.parent.parent.grid_pars.multSyst.text()) if self.parent.parent.grid_pars.multSyst.text().strip() != '' else 1
         pars = [list(grid.keys())[list(grid.values()).index('x')],
                 list(grid.keys())[list(grid.values()).index('y')]]
-        fixed = list(grid.keys())[list(grid.values()).index('fixed')]
-        if getattr(self.parent.parent.grid_pars, fixed + '_val').currentText() != '':
-            fixed = {fixed: float(getattr(self.parent.parent.grid_pars, fixed + '_val').currentText())}
-        else:
-            fixed = {fixed: 'all'}
+        if 'z' in list(grid.values()):
+            pars.append(list(grid.keys())[list(grid.values()).index('z')])
+        fix = [k for k in grid.keys() if grid[k] == 'fixed']
+        fixed = {}
+        for f in fix:
+            if getattr(self.parent.parent.grid_pars, f + '_val').currentText() != '':
+                fixed[f] = float(getattr(self.parent.parent.grid_pars, f + '_val').currentText())
+            else:
+                fixed[f] = 'all'
+        name = ''
         for idx in self.selectedIndexes():
             if idx.column() == 0:
                 name = self.cell_value('name')
-                self.parent.parent.H2.comparegrid(name, species=species, pars=pars, fixed=fixed, syst=syst, plot=False,
-                                                  levels=self.parent.parent.grid_pars.H2levels,
-                                                  others=self.parent.parent.grid_pars.othermode.currentText(), spmode = spmode)
-                grid = self.parent.parent.H2.grid
-                self.parent.parent.H2.grid['name'] = name
-                #print('grid', grid['uv'], grid['n0'], grid['lnL'])
-                self.parent.parent.plot_reg.set_data(x=grid[pars[0]], y=grid[pars[1]], z=grid['lnL'])
-                self.parent.parent.plot_reg.setLabels(bottom='log('+pars[0]+')', left='log('+pars[1]+')')
-                #self.pos = [self.x[0] - (self.x[1] - self.x[0]) / 2, self.y[0] - (self.y[1] - self.y[0]) / 2]
-                #self.scale = [(self.x[-1] - self.x[0]) / (self.x.shape[0] - 1), (self.y[-1] - self.y[0]) / (self.y.shape[0] - 1)]
+        self.parent.parent.H2.comparegrid(name, species=species, pars=pars, fixed=fixed, syst=syst, syst_factor=syst_factor,plot=False,
+                                          levels=self.parent.parent.grid_pars.H2levels,
+                                          others=self.parent.parent.grid_pars.othermode.currentText(),
+                                          ides=int(self.parent.parent.grid_pars.sides.isChecked())+1,
+                                          spmode = spmode)
+        grid = self.parent.parent.H2.grid
+        self.parent.parent.H2.grid['name'] = name
+        self.parent.parent.H2.grid['ndims'] = len(pars)
+        #print('grid', grid['uv'], grid['n0'], grid['lnL'])
+        self.parent.parent.plot_reg.set_data(x=grid[pars[0]], y=grid[pars[1]], z=grid['lnL'])
+        self.parent.parent.plot_reg.setLabels(bottom='log('+pars[0]+')', left='log('+pars[1]+')')
+        #self.pos = [self.x[0] - (self.x[1] - self.x[0]) / 2, self.y[0] - (self.y[1] - self.y[0]) / 2]
+        #self.scale = [(self.x[-1] - self.x[0]) / (self.x.shape[0] - 1), (self.y[-1] - self.y[0]) / (self.y.shape[0] - 1)]
 
     def show_results(self):
         for idx in self.selectedIndexes():
@@ -525,7 +631,7 @@ class chooseH2SystemWidget(QWidget):
         layout = QVBoxLayout()
 
         self.table = QSOlistTable(self)
-        data = self.parent.H2.H2.makelist(pars=['z_dla', 'Me__val', 'H2__val'], sys=self.parent.H2.H2.all(), view='numpy')
+        data = self.parent.H2.H2.makelist(pars=['z_dla', 'CO__val'], sys=self.parent.H2.H2.all(species='CO'), view='numpy')
         #data = self.H2.H2.list(pars=['name', 'H2', 'metallicity'])
         self.table.setdata(data)
         self.table.setSelectionBehavior(QTableView.SelectRows);
@@ -586,10 +692,10 @@ class gridParsWidget(QWidget):
         self.parent = parent
         #self.resize(700, 900)
         #self.move(400, 100)
-        self.pars = {'n0': 'x', 'uv': 'y', 'me': 'fixed'}
-        #self.pars = {'n0': 'x', 'me': 'y', 'uv': 'fixed'}
+        #self.pars = {'n0': 'x', 'avmax': 'y', 'Z': 'fixed','uv': 'fixed'}
+        self.pars = {'n0': 'x', 'P': 'disable', 'uv': 'y', 'Z': 'fixed', 'Av': 'disable', 'NCO': 'z'}
         self.parent.H2.setgrid(pars=list(self.pars.keys()), show=False)
-        self.cols, self.x_, self.y_, self.z_, self.mpars = None, None, None, None, None
+        self.cols, self.x_, self.y_, self.z_, self.lnL_, self.mpars = None, None, None, None, None, None
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel('grid parameters:'))
@@ -598,7 +704,7 @@ class gridParsWidget(QWidget):
             l = QHBoxLayout(self)
             l.addWidget(QLabel((n + ': ')[:3]))
             self.group = QButtonGroup(self)
-            for b in ('x', 'y', 'z', 'fixed'):
+            for b in ('x', 'y', 'z', 'disable', 'fixed'):
                 setattr(self, b, QCheckBox(b, checkable=True))
                 getattr(self, b).clicked[bool].connect(partial(self.setGridView, par=n, b=b))
                 l.addWidget(getattr(self, b))
@@ -606,10 +712,24 @@ class gridParsWidget(QWidget):
             getattr(self, self.pars[n]).setChecked(True)
             setattr(self, n + '_val', QComboBox(self))
             getattr(self, n + '_val').setFixedSize(80, 25)
-            getattr(self, n + '_val').addItems(np.append([''], np.asarray(np.sort(np.unique(self.parent.H2.grid[n])), dtype=str)))
-            if self.pars[n] is 'fixed':
-                getattr(self, n + '_val').setCurrentIndex(1)
+            if None not in self.parent.H2.grid[n]:
+                getattr(self, n + '_val').addItems(np.asarray(np.sort(np.unique(self.parent.H2.grid[n])), dtype=str))
+                if self.pars[n] == 'fixed':
+                    getattr(self, n + '_val').setCurrentIndex(0)
+                getattr(self, n + '_val').currentTextChanged[str].connect(partial(self.setGridView, par=n, b='val'))
+            else:
+                self.pars[n] = 'disable'
+                getattr(self, self.pars[n]).setChecked(True)
+                for b in ('x', 'y', 'disable', 'fixed'):
+                    getattr(self, b).setEnabled(False)
             l.addWidget(getattr(self, n + '_val'))
+            if n == 'uv':
+                setattr(self, n + '_type', QComboBox(self))
+                getattr(self, n + '_type').setFixedSize(80, 25)
+                getattr(self, n + '_type').addItems(['Habing', 'Draine', 'Mathis', 'AGN'])
+                getattr(self, n + '_type').setCurrentIndex(2)
+                getattr(self, n + '_type').currentIndexChanged[str].connect(self.changeUV)
+                l.addWidget(getattr(self, n + '_type'))
             l.addStretch(1)
             layout.addLayout(l)
 
@@ -619,6 +739,15 @@ class gridParsWidget(QWidget):
         self.addSyst.setText(str(0.2))
         self.addSyst.setFixedSize(90, 30)
         l.addWidget(self.addSyst)
+        l.addWidget(QLabel(' or x by'))
+        self.multSyst = QLineEdit()
+        self.multSyst.setText('')
+        self.multSyst.setFixedSize(40, 30)
+        l.addWidget(self.multSyst)
+        self.sides = QCheckBox('both sides')
+        self.sides.setFixedSize(90, 30)
+        self.sides.setChecked(True)
+        l.addWidget(self.sides)
         l.addStretch(1)
         layout.addLayout(l)
 
@@ -656,7 +785,7 @@ class gridParsWidget(QWidget):
         self.refine.clicked[bool].connect(partial(self.regridIt, kind='accurate'))
         self.refine.setFixedSize(90, 30)
         l.addWidget(self.refine)
-        self.numPlot = QLineEdit(str(100))
+        self.numPlot = QLineEdit(str(30))
         self.numPlot.setFixedSize(90, 30)
         l.addWidget(self.numPlot)
         l.addWidget(QLabel('x:'))
@@ -675,6 +804,11 @@ class gridParsWidget(QWidget):
         self.ymax = QLineEdit('')
         self.ymax.setFixedSize(30, 30)
         l.addWidget(self.ymax)
+        l.addWidget(QLabel('z='))
+        self.zval = QLineEdit('')
+        self.zval.setFixedSize(60, 30)
+        self.zval.setText(str(15.0))
+        l.addWidget(self.zval)
         l.addStretch(1)
         layout.addLayout(l)
 
@@ -691,7 +825,11 @@ class gridParsWidget(QWidget):
         self.plotphys.clicked[bool].connect(self.plot_mpars)
         self.plotphys.setFixedSize(90, 30)
         l.addWidget(self.plotphys)
-        #l.addStretch(1)
+        l.addStretch(1)
+        self.best_fit = QPushButton('Best')
+        self.best_fit.clicked[bool].connect(self.bestIt)
+        self.best_fit.setFixedSize(60, 30)
+        l.addWidget(self.best_fit)
         self.export_table = QPushButton('Table')
         self.export_table.clicked[bool].connect(self.tableIt)
         self.export_table.setFixedSize(90, 30)
@@ -712,6 +850,10 @@ class gridParsWidget(QWidget):
         self.plot_model_set.addItems(['H2+CI', 'H2+CO', 'OH','CO'])
         self.plot_model_set.setCurrentIndex(0)
         l.addWidget(self.plot_model_set)
+        self.joint = QPushButton('Joint')
+        self.joint.clicked[bool].connect(self.joinIt)
+        self.joint.setFixedSize(90, 30)
+        l.addWidget(self.joint)
         l.addStretch(1)
         layout.addLayout(l)
 
@@ -727,9 +869,13 @@ class gridParsWidget(QWidget):
         except:
             pass
 
-    def compareIt(self):
-        self.parent.H2_systems.table.compare(species=str(self.species.currentText()), spmode = str(self.spmode.currentText()))
-        self.interpolateIt()
+    def compareIt(self, init=False):
+        print('compareIt', init)
+        if init:
+            self.parent.H2_systems.table.compare(species='')
+        else:
+            self.parent.H2_systems.table.compare(species=str(self.species.currentText()), spmode = str(self.spmode.currentText()))
+            self.interpolateIt()
         grid = self.parent.H2.grid
         x, y = np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('x')]]), np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('y')]])
         self.xmin.setText(str(np.min(x)))
@@ -739,43 +885,59 @@ class gridParsWidget(QWidget):
 
     def interpolateIt(self):
         grid = self.parent.H2.grid
-        x, y = np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('x')]]), np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('y')]])
+        for attr in ['x', 'y', 'z']:
+            setattr(self, attr, None)
+            if attr in list(self.pars.values()):
+                setattr(self, attr, np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index(attr)]]))
         sp = grid['cols'][0].keys()
-        mp = grid['mpars'][0].keys()
+        #mp = grid['mpars'][0].keys()
         self.cols = {}
         self.mpars = {}
         #sp_full = grid['cols'][0].keys()
         for s in sp:
-            if 0:
-                self.cols[s] = interp2d(x, y, [c[s] for c in grid['cols']], kind='cubic')
-            if 0:
-                xt, yt = np.unique(sorted(x)), np.unique(sorted(y))
-                z = np.zeros([xt.shape[0], yt.shape[0]])
-                for i, xi in enumerate(xt):
-                    for k, yk in enumerate(yt):
-                        z[i, k] = grid['cols'][np.argmin((xi - x) ** 2 + (yk - y) ** 2)][s]
+            if grid['ndims'] == 2:
+                if 0:
+                    self.cols[s] = interp2d(x, y, [c[s] for c in grid['cols']], kind='cubic')
+                if 0:
+                    xt, yt = np.unique(sorted(x)), np.unique(sorted(y))
+                    z = np.zeros([xt.shape[0], yt.shape[0]])
+                    for i, xi in enumerate(xt):
+                        for k, yk in enumerate(yt):
+                            z[i, k] = grid['cols'][np.argmin((xi - x) ** 2 + (yk - y) ** 2)][s]
 
-                self.cols[s] = RectBivariateSpline(xt, yt, z, kx=2, ky=2)
-            if 0:
-                if s=='H2j0' or s=='H2j1':
-                    self.cols[s] = Rbf(x, y, np.asarray([c[s] for c in grid['cols']]), function='inverse', epsilon=0.3)
-                else:
-                    self.cols[s] = Rbf(x, y, np.asarray([c[s] for c in grid['cols']]), function='multiquadric',smooth=0.2)
-            if 1:
-                self.cols[s] = Rbf(x, y, np.asarray([c[s] for c in grid['cols']]), function='multiquadric', smooth=0.1)
-        for p in mp:
-            self.mpars[p] = Rbf(x, y, np.asarray([np.log10(c[p]) for c in grid['mpars']]), function='multiquadric', smooth=0.1)
-
-            #rbf = Rbf(x,y,z,function='multiquadric',smooth=0.2)
+                    self.cols[s] = RectBivariateSpline(xt, yt, z, kx=2, ky=2)
+                if 0:
+                    if s=='H2j0' or s=='H2j1':
+                        self.cols[s] = Rbf(x, y, np.asarray([c[s] for c in grid['cols']]), function='inverse', epsilon=0.3)
+                    else:
+                        self.cols[s] = Rbf(x, y, np.asarray([c[s] for c in grid['cols']]), function='multiquadric',smooth=0.2)
+                if 0:
+                    self.cols[s] = Rbf(x, y, np.asarray([c[s] for c in grid['cols']]), function='multiquadric', smooth=0.1)
+                if 1:
+                    self.cols[s] = Rbf(self.x, self.y, np.asarray([c[s] for c in grid['cols']]), function='multiquadric',
+                                       smooth=0.1)
+                # for p in mp:
+                #     self.mpars[p] = Rbf(x, y, np.asarray([np.log10(c[p]) for c in grid['mpars']]), function='multiquadric', smooth=0.1)
+        if self.x is not None and self.y is not None and self.z is not None:
+            xobs = np.c_[self.x, self.y, self.z]
+            # print(xobs)
+            yobs = np.asarray([c[s] for c in grid['cols']])
+            # print(yobs)
+            self.cols[s] = RBFInterpolator(xobs, yobs, kernel='multiquadric', epsilon=1)  # , smoothing=0.001)
+            # rbf = Rbf(x,y,z,function='multiquadric',smooth=0.2)
 
     def regridIt(self, kind='accurate', save=True):
         grid = self.parent.H2.grid
-        num = int(self.numPlot.text())
-        x, y = np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('x')]]), np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('y')]])
-        x1, y1 = x, y # copy for save
-        x, y = np.linspace(float(self.xmin.text()), float(self.xmax.text()), num), np.linspace(float(self.ymin.text()), float(self.ymax.text()), num)
-        X, Y = np.meshgrid(x, y)
-        z = np.zeros_like(X)
+        syst = float(self.addSyst.text()) if self.addSyst.text().strip() != '' else 0
+        syst_factor = float(self.multSyst.text()) if self.multSyst.text().strip() != '' else 1
+
+        #num = int(self.numPlot.text())
+        #x, y = np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('x')]]), np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('y')]])
+        #x1, y1 = x, y # copy for save
+        #x, y = np.linspace(float(self.xmin.text()), float(self.xmax.text()), num), np.linspace(float(self.ymin.text()), float(self.ymax.text()), num)
+        #X, Y = np.meshgrid(x, y)
+        #z = np.zeros_like(X)
+
         sp = grid['cols'][0].keys()
         sp = [s for s in sp if int(s[3:]) in self.H2levels]
         species = {}
@@ -786,23 +948,19 @@ class gridParsWidget(QWidget):
         #mparsgrid = {}
         #for p in mp:
         #    mparsgrid[p] = np.zeros_like(X)
-
         for s in sp:
-            v1 = self.parent.H2.comp(grid['name']).e[s].col.log().copy()
+            self.parent.H2.comp(grid['name']).e[s].col.log()
+            v1 = a(self.parent.H2.comp(grid['name']).e[s].col.log().val,
+                   self.parent.H2.comp(grid['name']).e[s].col.log().plus * syst_factor,
+                   self.parent.H2.comp(grid['name']).e[s].col.log().minus * syst_factor)
             if kind == 'fast':
-                v1.minus, v1.plus = np.sqrt(v1.minus ** 2 + float(self.addSyst.text()) ** 2), np.sqrt(v1.plus ** 2 + float(self.addSyst.text()) ** 2)
+                v1.minus, v1.plus = np.sqrt(v1.minus ** 2 + syst ** 2), np.sqrt(v1.plus ** 2 + syst ** 2)
             elif kind == 'accurate':
-                v1 *= a(0, float(self.addSyst.text()), float(self.addSyst.text()), 'l')
+                v1 *= a(0, syst, syst, 'l')
             if spmode == 'abs':
                 species[s] = v1
             elif spmode == 'rel':
                 species[s] = v1/self.parent.H2.comp(grid['name']).e[sp[0]].col.log()
-
-#            elif str(self.species.currentText()) == 'CI':
-#                species[s] = v1
-#            elif str(self.species.currentText()) == 'CO':
-#                species[s] = v1
-
 
         if 1:
             others = self.parent.grid_pars.othermode.currentText()
@@ -811,17 +969,6 @@ class gridParsWidget(QWidget):
             label = spname + 'j{:}'
             keys = [label.format(i) for i in levels if label.format(i) in full_keys]
             print('regrid keys',keys)
-            #if str(self.species.currentText()) == 'H2':
-            #    full_keys = grid['cols'][0].keys()
-            #    keys = ['H2j{:}'.format(i) for i in levels if 'H2j{:}'.format(i) in full_keys]
-
-            #if str(self.species.currentText()) == 'CI':
-            #    full_keys = grid['cols'][0].keys()
-            #    keys = ['CIj{:}'.format(i) for i in levels if 'CIj{:}'.format(i) in full_keys]
-
-            #if str(self.species.currentText()) == 'CO':
-            #    full_keys = grid['cols'][0].keys()
-            #    keys = ['COj{:}'.format(i) for i in levels if 'COj{:}'.format(i) in full_keys]
 
             if others in ['lower', 'upper']:
                 for k in full_keys:
@@ -832,38 +979,62 @@ class gridParsWidget(QWidget):
                         else:
                             species[k] = a(v.val + v.plus, t=others[0])
 
-        if save:
-            cols = {}
-            for s in self.cols.keys():
-                cols[s] = np.zeros_like(z)
-        for i, xi in enumerate(x):
-            for k, yi in enumerate(y):
-                lnL = 0
-                for s, v in species.items():
-                    if v.type in ['m', 'u', 'l']:
-                        if spmode == 'abs':
-                        #if str(self.species.currentText()) == 'H2':
-                            cols[s][k, i] = self.cols[s](xi, yi)
-                            lnL += v.lnL(cols[s][k, i])
-                        elif spmode == 'rel':
-                            cols[s][k, i] = self.cols[s](xi, yi) - self.cols[spname+'j0'](xi, yi)
-                            lnL += v.lnL(cols[s][k, i])
-                            print('v=', v, 'PDR', cols[s][k, i], '+lnL', v.lnL(cols[s][k, i]))
-                print(xi, yi, lnL)
-                        #elif str(self.species.currentText()) == 'CI':
-                        #    #cols[s][k, i] = self.cols[s](xi, yi) - self.cols['CIj0'](xi, yi)
-                        #    cols[s][k, i] = self.cols[s](xi, yi)
-                        #    lnL += v.lnL(cols[s][k, i])
-                        #
-                        #elif str(self.species.currentText()) == 'CO':
-                        #    cols[s][k, i] = self.cols[s](xi, yi)
-                        #    lnL += v.lnL(cols[s][k, i])
 
-                z[k, i] = lnL
-
+        num = int(self.numPlot.text())
+        x, y = np.log10(grid[list(self.pars.keys())[list(self.pars.values()).index('x')]]), np.log10(
+            grid[list(self.pars.keys())[list(self.pars.values()).index('y')]])
+        x1, y1 = x[:], y[:]  # copy for save
+        if grid['ndims'] == 2:
+            x, y = np.linspace(float(self.xmin.text()), float(self.xmax.text()), num), np.linspace(float(self.ymin.text()), float(self.ymax.text()), num)
+            X, Y = np.meshgrid(x, y)
+            lnL = np.zeros_like(X)
+            if save:
+                cols = {}
+                for s in self.cols.keys():
+                    cols[s] = np.zeros_like(z)
+            for i, xi in enumerate(x):
+                for k, yi in enumerate(y):
+                    L = 0
+                    for s, v in species.items():
+                        if v.type in ['m', 'u', 'l']:
+                            if spmode == 'abs':
+                                cols[s][k, i] = self.cols[s](xi, yi)
+                                L += v.lnL(cols[s][k, i])
+                            elif spmode == 'rel':
+                                cols[s][k, i] = self.cols[s](xi, yi) - self.cols[spname+'j0'](xi, yi)
+                                L += v.lnL(cols[s][k, i])
+                                #print('v=', v, 'PDR', cols[s][k, i], '+lnL', v.lnL(cols[s][k, i]))
+                    lnL[k, i] = lnL
+            self.x_, self.y_, self.lnL_ = x, y, lnL
 
 
-        self.x_, self.y_, self.z_ = x, y, z
+        elif grid['ndims'] == 3:
+            x, y = np.linspace(float(self.xmin.text()), float(self.xmax.text()), num), np.linspace(
+                float(self.ymin.text()), float(self.ymax.text()), num)
+            z = float(self.zval.text())
+            print(z)
+            X, Y = np.meshgrid(x, y)
+            lnL = np.zeros_like(X)
+            if save:
+                cols = {}
+                for s in self.cols.keys():
+                    cols[s] = np.zeros_like(lnL)
+
+            for i, xi in enumerate(x):
+                for k, yi in enumerate(y):
+                    data, L = [[xi, yi, z]], 0
+                    for s, v in species.items():
+                        if v.type == 'm':
+                            if str(self.species.currentText()) == 'H2':
+                                cols[s][k, i] = self.cols[s](data)
+                            elif str(self.species.currentText()) == 'CI':
+                                cols[s][k, i] = self.cols[s](data) - self.cols['CIj0'](data)
+                            elif str(self.species.currentText()) == 'CO':
+                                cols[s][k, i] = self.cols[s](data)# - self.cols['COj0'](data)
+                            L += v.lnL(cols[s][k, i])
+
+                    lnL[k, i] = L
+            self.x_, self.y_, self.lnL_ = x, y, lnL
 
         if save:
             for s in cols.keys():
@@ -975,15 +1146,16 @@ class gridParsWidget(QWidget):
 
 
     def plotIt(self):
-        if str(self.plot_model_set.currentText()) == 'H2+CI':
-            print('H2+CI')
+        print('Plot:', str(self.plot_model_set.currentText()))
         if self.x is not None:
-            d = distr2d(x=self.x_, y=self.y_, z=np.exp(self.z_))
+            print(self.uv_type.currentText())
+            data = self.rescaleUV(self.uv_type.currentText(),
+                                  data={'x': 10 ** self.x_, 'y': 10 ** self.y_, 'z': self.lnL_})
+            d = distr2d(x=np.log10(data['x']), y=np.log10(data['y']), z=np.exp(data['z']))
             dx, dy = d.marginalize('y'), d.marginalize('x')
             dx.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('x')])
             dy.stats(latex=2, name=list(self.pars.keys())[list(self.pars.values()).index('y')])
-            d.plot(color=None)
-
+            d.plot(color=None, xlabel=data['bottom'], ylabel=data['left'])
             plt.show()
         #self.plot_mpars()
 
@@ -1042,7 +1214,7 @@ class gridParsWidget(QWidget):
                     d = distr2d(x=self.x_, y=self.y_, z=np.exp(self.z_ + z_prior))
                     d.dopoint()
                     print('min chi2 coords:', d.point[0], d.point[1])
-                    name = 'output/{:s}_join_lnL.pkl'
+                    name = 'output/{:s}_H2CI_lnL.pkl'
                     # save a join likelihood
                     with open(name.format(self.parent.H2.grid['name']), 'wb') as f:
                         pickle.dump([self.x_, self.y_, self.z_ + z_prior], f)
@@ -1139,7 +1311,7 @@ class gridParsWidget(QWidget):
                     d = distr2d(x=self.x_, y=self.y_, z=np.exp(self.z_ + z_prior))
                     d.dopoint()
                     print('min chi2 coords:', d.point[0], d.point[1])
-                    name = 'output/{:s}_join_lnL.pkl'
+                    name = 'output/{:s}_H2CO_lnL.pkl'
                     # save a join likelihood
                     with open(name.format(self.parent.H2.grid['name']), 'wb') as f:
                         pickle.dump([self.x_, self.y_, self.z_ + z_prior], f)
@@ -1212,29 +1384,38 @@ class gridParsWidget(QWidget):
                 plt.show()
 
 
+    def bestIt(self):
+        inds = np.where(self.lnL_ == np.max(self.lnL_.flatten()))
+        print(self.x_[inds[1][0]], self.y_[inds[0][0]])
+        self.parent.plot_reg.mousePressEvent(None, pos=(self.x_[inds[1][0]], self.y_[inds[0][0]]))
+        #data = self.rescaleUV(self.uv_type.currentText(), data={'x': 10 ** self.x_, 'y': 10 ** self.y_, 'z': self.lnL_})
+
 
     def tableIt(self):
-        print(self.parent.plot_reg.mousePoint.x(), self.parent.plot_reg.mousePoint.y())
+        #print(self.parent.plot_reg.mousePoint.x(), self.parent.plot_reg.mousePoint.y())
+        print(self.parent.plot_reg.x, self.parent.plot_reg.y)
         d = [['species', 'observed', 'model']]
         if self.parent.grid_pars.cols is not None:
             cols = {}
             for s in self.parent.H2.grid['cols'][0].keys():
-                cols[s] = self.parent.grid_pars.cols[s](self.parent.plot_reg.mousePoint.x(), self.parent.plot_reg.mousePoint.y())
+                cols[s] = self.parent.grid_pars.cols[s](self.parent.plot_reg.x, self.parent.plot_reg.y)
+                #cols[s] = self.parent.grid_pars.cols[s](self.parent.plot_reg.mousePoint.x(), self.parent.plot_reg.mousePoint.y())
 
         q = self.parent.H2.H2.getcomp(self.parent.H2.grid['name'])
-        for e in ['H2j0', 'H2j1', 'H2j2']:
+        for e in ['H2j0', 'H2j1', 'H2j2', 'H2j3', 'H2j4', 'H2j5', 'H2j6', 'H2j7']:
             d.append([e.replace('H2', 'H$_2$ ').replace('j', 'J='), q.e[e].col.latex(f=2), '{:5.2f}'.format(cols[e])])
-        pr = pyratio(z=q.z)
-        n = [q.e['CIj0'].col, q.e['CIj1'].col, q.e['CIj2'].col]
-        pr.add_spec('CI', n)
-        pr.set_pars(['T', 'n', 'f', 'UV'])
-        pr.pars['UV'].value = self.parent.plot_reg.mousePoint.y()
-        pr.pars['n'].value = self.parent.plot_reg.mousePoint.x() - 0.3
-        pr.set_prior('f', a(0, 0, 0))
-        pr.set_prior('T', a(q.e['T01'].col.log().val, 0, 0))
-        p = pr.predict(name='CI', level=-1, logN=n[0]+n[1]+n[2])
-        for i, e in enumerate(['CIj0', 'CIj1', 'CIj2']):
-            d.append([e.replace('j0', '').replace('j1', '*').replace('j2', '**'), q.e[e].col.log().latex(f=2), '{:5.2f}$^a$'.format(p[i].val)])
+        if 0:
+            pr = pyratio(z=q.z)
+            n = [q.e['CIj0'].col, q.e['CIj1'].col, q.e['CIj2'].col]
+            pr.add_spec('CI', n)
+            pr.set_pars(['T', 'n', 'f', 'UV'])
+            pr.pars['UV'].value = self.parent.plot_reg.mousePoint.y()
+            pr.pars['n'].value = self.parent.plot_reg.mousePoint.x() - 0.3
+            pr.set_prior('f', a(0, 0, 0))
+            pr.set_prior('T', a(q.e['T01'].col.log().val, 0, 0))
+            p = pr.predict(name='CI', level=-1, logN=n[0]+n[1]+n[2])
+            for i, e in enumerate(['CIj0', 'CIj1', 'CIj2']):
+                d.append([e.replace('j0', '').replace('j1', '*').replace('j2', '**'), q.e[e].col.log().latex(f=2), '{:5.2f}$^a$'.format(p[i].val)])
 
         print(d)
         output = StringIO()
@@ -1243,6 +1424,64 @@ class gridParsWidget(QWidget):
         print(table)
         output.close()
 
+    def joinIt(self):
+        for idx in self.parent.H2_systems.table.selectedIndexes():
+            if idx.column() == 0:
+                name = self.parent.H2_systems.table.cell_value('name')
+
+        if 'H2+CI' in self.plot_model_set.currentText():
+            H2 = {}
+            with open('output/{0:s}_{1:s}.pkl'.format(name, 'H2'), 'rb') as f:
+                H2['n'], H2['UV'], H2['lnL'] = pickle.load(f)
+                H2['n'], H2['UV'] = np.log10(H2['n']), np.log10(H2['UV'])
+            CI = {}
+            with open('output/{0:s}_{1:s}.pkl'.format(name, 'CI'), 'rb') as f:
+                CI['n'], CI['UV'], CI['lnL'] = pickle.load(f)
+                CI['n'], CI['UV'] = np.log10(CI['n']), np.log10(CI['UV'])
+
+            X, Y = np.meshgrid(np.linspace(np.min(H2['n']) + 0.1, np.max(H2['n']) - 0.1, 100),
+                               np.linspace(np.min(H2['UV']) + 0.1, np.max(H2['UV']) - 0.1, 100))
+            X, Y = X.flatten(), Y.flatten()
+            z = np.zeros_like(X.flatten())
+
+            x, y = np.meshgrid(H2['n'], H2['UV'])
+            h2 = Rbf(x.flatten(), y.flatten(), H2['lnL'].flatten(), function='multiquadric', smooth=0.1)
+
+            x, y = np.meshgrid(CI['n'], CI['UV'])
+            ci = Rbf(x.flatten(), y.flatten(), CI['lnL'].flatten(), function='multiquadric', smooth=0.1)
+            z = h2(X, Y) + ci(X, Y)
+            z -= np.max(z.flatten())
+            d = distr2d(X, Y, np.exp(z))
+
+            xlabel, ylabel = r'$\log$ n$_{\rm H}$ [cm$^{-3}$]', r'$\log\,I_{\rm UV}$'
+            proxy = []
+            fig = d.plot(frac=0.15, indent=0.11, xlabel=xlabel, ylabel=ylabel,
+                         color='orangered', cmap='Reds', color_marg='orangered', alpha=0, zorder=20)
+            for attr, par in zip(['x', 'y'], ['UV', 'n']):
+                d1 = d.marginalize(attr)
+                d1.stats(latex=2, name=par)
+
+            ax = fig.get_axes()[0]
+            d = distr2d(H2['n'], H2['UV'], np.exp(H2['lnL']))
+            d.plot_contour(ax=ax, color="violet", cmap='BuPu', color_point=None, xlabel=xlabel, ylabel=ylabel,
+                           ls=None, alpha=0, label=r'H$_2$')
+            # proxy.append(mpatches.Patch(color='blueviolet', label=r'H$_2$'))
+
+            d = distr2d(CI['n'], CI['UV'], np.exp(CI['lnL']))
+            d.plot_contour(ax=ax, color="limegreen", cmap='BuGn', color_point=None, xlabel=xlabel, ylabel=ylabel,
+                           ls=None, alpha=0, label=r'C$\,$I')
+            proxy.append(mpatches.Patch(color='green', label=r'C$\,$I'))
+
+            proxy.append(mpatches.Patch(color='orangered', label=r'joint'))
+
+            ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+            ax.xaxis.set_major_locator(MultipleLocator(0.5))
+            ax.yaxis.set_minor_locator(AutoMinorLocator(5))
+            ax.yaxis.set_major_locator(MultipleLocator(1))
+            ax.legend(handles=proxy, frameon=False, fontsize=12)
+            fig.tight_layout()
+
+            plt.show()
 
     def setGridView(self, par, b):
         self.pars[par] = b
@@ -1252,16 +1491,95 @@ class gridParsWidget(QWidget):
             self.pars[par] = getattr(self, par + '_val').currentText()
         #print(self.pars)
 
+
+    def UVrescale(self, init='Mathis', agn=None):
+
+        if init == 'Mathis':
+            l = np.linspace(912, 2460, 100)
+            uv = np.zeros_like(l)
+            mask = np.logical_and(912 <= l, l <= 1100)
+            uv[mask] = 1.287e-9 * (l[mask] / 1e4) ** 4.4172
+            mask = np.logical_and(1110 < l, l <= 1340)
+            uv[mask] = 6.825e-13 * (l[mask] / 1e4)
+            mask = np.logical_and(1340 < l, l <= 2460)
+            uv[mask] = 2.373e-14 * (l[mask] / 1e4) ** (-0.6678)
+            uv = interp1d(l, uv / (ac.c.cgs.value / l / 1e-8), bounds_error=0, fill_value=0)
+
+        return np.trapz(agn(l), x=l) / np.trapz(uv(l), x=l)
+
+    def rescaleUV(self, s, data=None):
+        grid = self.parent.grid_pars.pars
+        pars = [list(grid.keys())[list(grid.values()).index('x')], list(grid.keys())[list(grid.values()).index('y')]]
+        grid = self.parent.H2.grid
+        ind = pars.index('uv')
+        ref, labels = ['x', 'y'], ['bottom', 'left']
+        print(pars)
+        d = {}
+        if data == None:
+            data = {'x': grid[pars[0]], 'y': grid[pars[1]], 'z': grid['lnL']}
+        d[ref[np.delete(np.arange(2), ind)[0]]] = data[ref[np.delete(np.arange(2), ind)[0]]]
+        d[labels[np.delete(np.arange(2), ind)[0]]] = 'log(' + pars[np.delete(np.arange(2), ind)[0]] + ')'
+        if s == 'Habing':
+            d[ref[np.delete(np.arange(2), 1 - ind)[0]]] = np.asarray(data[ref[np.delete(np.arange(2), 1 - ind)[0]]]) * 0.81
+            d[labels[np.delete(np.arange(2), 1 - ind)[0]]] = 'log(' + pars[np.delete(np.arange(2), 1 - ind)[0]] + '), Habing'
+        if s == 'Draine':
+            d[ref[np.delete(np.arange(2), 1 - ind)[0]]] = np.asarray(data[ref[np.delete(np.arange(2), 1 - ind)[0]]]) * 1.37
+            d[labels[np.delete(np.arange(2), 1 - ind)[0]]] = 'log(' + pars[np.delete(np.arange(2), 1 - ind)[0]] + '), Draine'
+        if s == 'Mathis':
+            d[ref[np.delete(np.arange(2), 1 - ind)[0]]] = np.asarray(data[ref[np.delete(np.arange(2), 1 - ind)[0]]])
+            d[labels[np.delete(np.arange(2), 1 - ind)[0]]] = 'log(' + pars[np.delete(np.arange(2), 1 - ind)[0]] + '), Mathis'
+        if s == 'AGN':
+            b = {'u': 1.4e-10, 'g': 0.9e-10, 'r': 1.2e-10, 'i': 1.8e-10, 'z': 7.4e-10}
+            fil = np.genfromtxt('sdss_filter_r.dat', skip_header=6, usecols=(0, 1), unpack=True)
+            filter = interp1d(fil[0], fil[1], bounds_error=False, fill_value=0, assume_sorted=True)
+            for idx in self.parent.H2_systems.table.selectedIndexes():
+                if idx.column() == 0:
+                    name = self.parent.H2_systems.table.cell_value('name')
+                    print(name)
+                    qso = self.parent.H2.H2.get(name.split('_')[0])
+                    print(qso.z_em, qso.m['r'])
+                    DL = FlatLambdaCDM(70, 0.3, Tcmb0=2.725, Neff=0).luminosity_distance(qso.z_em).to('cm').value
+                    from astroquery.sdss import SDSS
+                    q = SDSS.get_spectral_template('qso')
+                    x, flux = 10 ** (np.arange(len(q[0][0].data[0])) * 0.0001 + q[0][0].header['CRVAL1']), q[0][0].data[0] * 1e-17
+                    mask = (x * (1 + qso.z_em) > fil[0][0]) * (x * (1 + qso.z_em) < fil[0][-1])
+                    scale = 10 ** bisect(self.flux_to_mag_solve, -25, 25,
+                                         args=(flux[mask], x[mask] * (1 + qso.z_em), b['r'], filter, qso.m['r']))
+                    print(scale)
+                    agn = interp1d(x, scale * flux * (DL / ac.kpc.cgs.value) ** 2 * x ** 2 / 1e8 / ac.c.cgs.value ** 2 * (1 + qso.z_em), bounds_error=0, fill_value='extrapolate')
+                    self.rescale = self.UVrescale(agn=agn)
+
+            d[ref[np.delete(np.arange(2), 1 - ind)[0]]] = np.sqrt(self.rescale / np.asarray(data[ref[np.delete(np.arange(2), 1 - ind)[0]]]))
+            np.savetxt('output/UVrescale.dat', np.c_[data[ref[np.delete(np.arange(2), 1 - ind)[0]]], np.sqrt(self.rescale / np.asarray(data[ref[np.delete(np.arange(2), 1 - ind)[0]]]))], fmt='%.5f', delimiter=' ')
+            d[labels[np.delete(np.arange(2), 1 - ind)[0]]] = 'log(d), kpc'
+
+        d['z'] = data['z']
+        print(d)
+        return d
+
+    def changeUV(self, s):
+        d = self.rescaleUV(s)
+        print(d)
+        self.parent.plot_reg.set_data(x=d['x'], y=d['y'], z=d['z'])
+        self.parent.plot_reg.setLabels(bottom=d['bottom'], left=d['left'])
+            #self.parent.plot_reg.getAxis('left').setScale(10)
+
+
+
 class H2viewer(QMainWindow):
 
     def __init__(self):
         super().__init__()
         #self.H2 = H2_exc(folder='data_z0.3') #h2_uv177_n_17_7_z0_31_s_25.hdf5', 'h2_uv0_1_n_1_z0_31_s_25.hdf5', 'h2_uv5_62_n_5_62_z0_31_s_23.hdf5
-        #self.H2 = H2_exc(folder='data/sample/1_5_4/av2_0_cmb0_0_z0_3_n_uv/', H2database='MW') #z0_1
+        #self.H2 = H2_exc(folder='data/sample/1_5_4/av2_0_cmb0_0_z1_0_n_uv/', H2database='CO') #z0_1
         #self.H2 = H2_exc(folder='data/sample/1_5_4/av0_5_cmb2_5_z0_1_n_uv', H2database='MW')
         #self.H2 = H2_exc(folder='data/sample/1_5_4/co_grid_n_uv_av10_cmb0_0_me1e0_cr15', H2database='MW')
-        self.H2 = H2_exc(folder='data/sample/co_grid_n_uv_av10_cmb0_0_me1e0', H2database='MW')
-        #self.H2 = H2_exc(folder='data/sample/1_5_4/test', H2database='MW')
+        #self.H2 = H2_exc(folder='data/sample/1_5_4/co_grid_n_uv_av10_cmb1_7_me1e0_cr1e1', H2database='CO')
+        #self.H2 = H2_exc(folder='data/sample/1_5_4/co_grid_n_uv_av10_cmb0_0_me1e0', H2database='CO')
+        #self.H2 = H2_exc(folder='data/sample/1_5_4/av2_0_cmb2_5_z1_0_n_uv/', H2database='CO')
+        #self.H2 = H2_exc(folder='data/sample/1_5_4/ver2083/z=0.0/av02_cr1e1_me1e0', H2database='CO')
+        #self.H2 = H2_exc(folder='data/sample/1_5_4/ver2053/av10_cmb0_0_me1e0_n_uv', H2database='CO')
+        self.H2 = H2_exc(folder='data/sample/1_5_4/ver2083/grid-n-av-uv1e0/', H2database='CO')
         self.H2.readfolder()
         self.initStyles()
         self.initUI()
