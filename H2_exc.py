@@ -14,9 +14,9 @@ from scipy import integrate
 from scipy.optimize import root
 from scipy.interpolate import interp1d
 import sys
-sys.path.append('/home/toksovogo/science/codes/python')
 sys.path.append('/science/python')
 sys.path.append('home/slava/science/codes/python/')
+sys.path.append('home/slava/science/codes/python/H2_excitation/')
 from spectro.a_unc import a
 from spectro.sviewer.utils import Timer
 from spectro.pyratio import *
@@ -24,8 +24,8 @@ import warnings
 from scipy.interpolate import interp2d, RectBivariateSpline, Rbf
 import pickle
 
-#pathH2exc = '/home/slava/science/codes/python/H2_excitation'
-pathH2exc = '/home/toksovogo/science/codes/python/3.5/H2_excitation'
+
+pathH2exc = '/home/slava/science/codes/python/H2_excitation'
 
 
 
@@ -1445,6 +1445,7 @@ class H2_exc():
         Read list of models from the folder
         """
         if 1:
+            print('folder:', self.folder )
             for (dirpath, dirname, filenames) in os.walk(self.folder):
                 print(dirpath, dirname, filenames)
                 for k,f in enumerate(filenames):

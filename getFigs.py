@@ -46,7 +46,7 @@ def getatomic(species, levels=[0, 1, 2]):
         return [CIenergy[i] for i in levels], [stat_CI[i] for i in levels]
 
 
-case = 'fig11'
+case = 'fig19'
 labelsize = 10
 msize=5
 lnLcolor= 'green'
@@ -834,7 +834,6 @@ if case == 'fig2_4':
         ax[0,1].yaxis.set_minor_locator(AutoMinorLocator(5))
         ax[0,1].yaxis.set_major_locator(MultipleLocator(0.5))
 
-
 if case == 'fig3':
     fig03, ax = plt.subplots(1, 3, figsize=(9, 2))
     #fig03.subplots_adjust(hspace=0.4)
@@ -1231,7 +1230,6 @@ if case == 'fig4_3':
         #ax[2].legend(fontsize=labelsize, bbox_to_anchor=(0.8, 0.65, 0.2, 0.3), frameon=True)
         #ax[1,2].set_xlim(-5,50)
         ax[2].set_ylim(-2.0, 0.5)
-
 
 #plot fits for all qso systems
 if case == 'fig8':

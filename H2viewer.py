@@ -27,6 +27,8 @@ from spectro.a_unc import a
 from spectro.pyratio import pyratio
 import copy
 
+pathH2exc = '/home/slava/science/codes/python/H2_excitation'
+
 class image():
     """
     class for working with images (2d spectra) inside Spectrum plotting
@@ -1745,7 +1747,7 @@ class H2viewer(QMainWindow):
         #self.H2 = H2_exc(folder='data/sample/1_5_4/av2_0_cmb2_5_z1_0_n_uv/', H2database='CO')
         #self.H2 = H2_exc(folder='data/sample/1_5_4/ver2083/z=0.0/av02_cr1e1_me1e0', H2database='CO')
         #self.H2 = H2_exc(folder='data/sample/1_5_4/ver2053/av10_cmb0_0_me1e0_n_uv', H2database='CO')
-        self.H2 = H2_exc(folder='data/sample/1_5_4/ver2083/grid-n-av/', H2database='CO')
+        self.H2 = H2_exc(folder=pathH2exc+'/data/sample/1_5_4/ver2083/grid-n-av-uv/', H2database='CO')
         #self.H2 = H2_exc(folder='data/sample/1_5_4/ver2083/test/', H2database='CO')
         self.H2.readfolder()
         self.initStyles()
