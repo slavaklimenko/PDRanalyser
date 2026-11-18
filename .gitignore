@@ -1,0 +1,27 @@
+# ---------------------------------------------------------------
+# private data: never commit
+# ---------------------------------------------------------------
+# full catalogue of systems, including unpublished ones
+PDR_summary.py
+# full database built from PDR_summary.py
+PDR_database_full.fits
+PDR_database.fits
+*_private*
+result/
+output/
+temp/
+
+# model grids (large): set PDR_MODELS or put them in data/models/
+data/*
+!data/pyratio/
+
+# ---------------------------------------------------------------
+# Python / Jupyter / OS
+# ---------------------------------------------------------------
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
